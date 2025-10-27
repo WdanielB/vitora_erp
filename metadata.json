@@ -1,5 +1,5 @@
 {
-  "name": "Vitora ERP",
+  "name": "vitora-erp",
   "description": "Un sistema ERP para gestionar costos, finanzas, inventario y ventas para una florería.",
   "requestFramePermissions": []
 }
