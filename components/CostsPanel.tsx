@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { FlowerItem, FixedItem, Item } from '../types';
 import { CogIcon } from './icons/CogIcon';
@@ -6,9 +7,9 @@ import CostModal from './CostModal';
 
 interface CostsPanelProps {
   flowerItems: FlowerItem[];
-  setFlowerItems: React.Dispatch<React.SetStateAction<FlowerItem[]>>;
+  setFlowerItems: (updater: FlowerItem[] | ((prev: FlowerItem[]) => FlowerItem[])) => Promise<void>;
   fixedItems: FixedItem[];
-  setFixedItems: React.Dispatch<React.SetStateAction<FixedItem[]>>;
+  setFixedItems: (updater: FixedItem[] | ((prev: FixedItem[]) => FixedItem[])) => Promise<void>;
   onNavigateToSettings: () => void;
   onNavigateToMain: () => void;
 }
@@ -31,7 +32,7 @@ const CostsPanel: React.FC<CostsPanelProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = (itemData: Partial<FlowerItem & FixedItem>) => {
+  const handleSave = async (itemData: Partial<FlowerItem & FixedItem>) => {
     const newItemData = { ...itemData, costHistory: [...(editingItem?.costHistory || [])] };
     const date = new Date().toISOString();
 
@@ -39,14 +40,14 @@ const CostsPanel: React.FC<CostsPanelProps> = ({
         if(itemData.costoPaquete !== (editingItem as FlowerItem).costoPaquete) {
             newItemData.costHistory.push({ date, costoPaquete: itemData.costoPaquete });
         }
-        setFlowerItems(prevItems => 
+        await setFlowerItems(prevItems => 
             prevItems.map(i => i.id === editingItem.id ? { ...i, ...newItemData } : i)
         );
     } else if (itemType === 'fixed' && editingItem) {
         if(itemData.costo !== editingItem.costo) {
             newItemData.costHistory.push({ date, costo: itemData.costo });
         }
-        setFixedItems(prevItems =>
+        await setFixedItems(prevItems =>
             prevItems.map(i => i.id === editingItem.id ? { ...i, ...newItemData } : i)
         );
     }

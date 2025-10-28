@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { FlowerItem, FixedItem, Item } from '../types';
 import { HomeIcon } from './icons/HomeIcon';
@@ -11,9 +12,9 @@ import Modal from './Modal';
 
 interface SettingsPanelProps {
   flowerItems: FlowerItem[];
-  setFlowerItems: React.Dispatch<React.SetStateAction<FlowerItem[]>>;
+  setFlowerItems: (updater: FlowerItem[] | ((prev: FlowerItem[]) => FlowerItem[])) => Promise<void>;
   fixedItems: FixedItem[];
-  setFixedItems: React.Dispatch<React.SetStateAction<FixedItem[]>>;
+  setFixedItems: (updater: FixedItem[] | ((prev: FixedItem[]) => FixedItem[])) => Promise<void>;
   onNavigateToMain: () => void;
   onNavigateToCosts: () => void;
   onNavigateToHistory: () => void;
@@ -46,9 +47,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = (itemData: Omit<Item, 'id' | 'costo' | 'costHistory'> & { imageUrl?: string }) => {
+  const handleSave = async (itemData: Omit<Item, 'id' | 'costo' | 'costHistory'> & { imageUrl?: string }) => {
     if (itemType === 'flower') {
-        setFlowerItems(prevItems => {
+        await setFlowerItems(prevItems => {
              const baseItem = editingItem ? prevItems.find(i => i.id === editingItem.id) : { costHistory: [] };
              const newItem: FlowerItem = { 
                 ...(baseItem as FlowerItem),
@@ -62,7 +63,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             return [...prevItems, newItem];
         });
     } else {
-        setFixedItems(prevItems => {
+        await setFixedItems(prevItems => {
             const baseItem = editingItem ? prevItems.find(i => i.id === editingItem.id) : { costHistory: [] };
             const newItem: FixedItem = { 
               ...(baseItem as FixedItem),
@@ -82,19 +83,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   };
 
 
-  const handleDelete = (type: 'flower' | 'fixed') => {
+  const handleDelete = async (type: 'flower' | 'fixed') => {
     if (type === 'flower' && selectedFlowerId) {
-      setFlowerItems(prev => prev.filter(item => item.id !== selectedFlowerId));
+      await setFlowerItems(prev => prev.filter(item => item.id !== selectedFlowerId));
       setSelectedFlowerId(null);
     } else if (type === 'fixed' && selectedFixedId) {
-      setFixedItems(prev => prev.filter(item => item.id !== selectedFixedId));
+      await setFixedItems(prev => prev.filter(item => item.id !== selectedFixedId));
       setSelectedFixedId(null);
     }
   };
 
-  const toggleVisibility = (id: string, type: 'flower' | 'fixed') => {
+  const toggleVisibility = async (id: string, type: 'flower' | 'fixed') => {
     const itemsSetter = type === 'flower' ? setFlowerItems : setFixedItems;
-    itemsSetter(prevItems => 
+    await itemsSetter(prevItems => 
       prevItems.map(item => 
         item.id === id ? { ...item, visible: !item.visible } : item
       )

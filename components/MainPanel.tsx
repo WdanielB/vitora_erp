@@ -8,7 +8,7 @@ import { EyeSlashIcon } from './icons/EyeSlashIcon';
 
 interface MainPanelProps {
   flowerItems: FlowerItem[];
-  setFlowerItems: React.Dispatch<React.SetStateAction<FlowerItem[]>>;
+  setFlowerItems: (updater: FlowerItem[] | ((prev: FlowerItem[]) => FlowerItem[])) => Promise<void>;
   fixedItems: FixedItem[];
   onNavigateToSettings: () => void;
 }
@@ -23,7 +23,6 @@ const MainPanel: React.FC<MainPanelProps> = ({ flowerItems, setFlowerItems, fixe
 
   const { totalPrice, totalCost, profit, profitMargin } = useMemo(() => {
     const fixedPrice = selectedFixedItem?.price ?? 0;
-    // Fix: Explicitly type the 'sum' accumulator as a number to resolve type inference issue.
     const flowersPrice = Object.values(addedFlowers).reduce(
       (sum: number, { item, count }) => sum + (item.price * count),
       0
@@ -31,7 +30,6 @@ const MainPanel: React.FC<MainPanelProps> = ({ flowerItems, setFlowerItems, fixe
     const calculatedTotalPrice = fixedPrice + flowersPrice;
 
     const fixedCost = selectedFixedItem?.costo ?? 0;
-    // Fix: Explicitly type the 'sum' accumulator as a number to resolve type inference issue.
     const flowersCost = Object.values(addedFlowers).reduce((sum: number, { item, count }) => {
         const { costoPaquete = 0, cantidadPorPaquete = 1, merma = 0 } = item;
         const effectiveQuantity = cantidadPorPaquete - merma;
@@ -80,7 +78,7 @@ const MainPanel: React.FC<MainPanelProps> = ({ flowerItems, setFlowerItems, fixe
     setAddedFlowers({});
   };
 
-  const handleDragSort = () => {
+  const handleDragSort = async () => {
     if (!draggedItem.current || !dragOverItem.current || draggedItem.current.id === dragOverItem.current.id) return;
   
     const items = [...flowerItems];
@@ -90,7 +88,7 @@ const MainPanel: React.FC<MainPanelProps> = ({ flowerItems, setFlowerItems, fixe
     const [reorderedItem] = items.splice(draggedItemIndex, 1);
     items.splice(dragOverItemIndex, 0, reorderedItem);
 
-    setFlowerItems(items);
+    await setFlowerItems(items);
 
     draggedItem.current = null;
     dragOverItem.current = null;
