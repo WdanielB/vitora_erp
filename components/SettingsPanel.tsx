@@ -1,6 +1,6 @@
-
 import React, { useState } from 'react';
 import type { FlowerItem, FixedItem, Item } from '../types';
+import * as api from '../services/api'; // Import api to get local storage data
 import { HomeIcon } from './icons/HomeIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { XIcon } from './icons/XIcon';
@@ -8,6 +8,8 @@ import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { CurrencyDollarIcon } from './icons/CurrencyDollarIcon';
 import { ChartBarIcon } from './icons/ChartBarIcon';
+import { CloudArrowUpIcon } from './icons/CloudArrowUpIcon';
+import { ArrowDownTrayIcon } from './icons/ArrowDownTrayIcon';
 import Modal from './Modal';
 
 interface SettingsPanelProps {
@@ -34,6 +36,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [itemType, setItemType] = useState<'flower' | 'fixed' | null>(null);
   const [selectedFlowerId, setSelectedFlowerId] = useState<string | null>(null);
   const [selectedFixedId, setSelectedFixedId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
   
   const openModalForNew = (type: 'flower' | 'fixed') => {
     setItemType(type);
@@ -100,6 +104,58 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         item.id === id ? { ...item, visible: !item.visible } : item
       )
     );
+  };
+
+  const handleForceSync = async () => {
+    setSyncStatus('syncing');
+    setSyncMessage('Sincronizando datos locales con la nube...');
+    try {
+      // FIX: Explicitly provide generic type to getItemsFromStorageOnly to avoid type errors.
+      const localFlowers = api.getItemsFromStorageOnly<FlowerItem[]>('flowerItems');
+      const localFixed = api.getItemsFromStorageOnly<FixedItem[]>('fixedItems');
+      
+      if (!localFlowers && !localFixed) {
+        throw new Error("No se encontraron datos locales para sincronizar.");
+      }
+
+      await Promise.all([
+        localFlowers ? api.updateFlowerItems(localFlowers) : Promise.resolve(),
+        localFixed ? api.updateFixedItems(localFixed) : Promise.resolve(),
+      ]);
+
+      setSyncStatus('success');
+      setSyncMessage('¡Sincronización completada con éxito!');
+    } catch (error) {
+      console.error("Error en la sincronización forzada:", error);
+      setSyncStatus('error');
+      setSyncMessage('Error al sincronizar. Revisa tu conexión a internet.');
+    } finally {
+        setTimeout(() => setSyncStatus('idle'), 5000);
+    }
+  };
+
+  const handleDownloadData = () => {
+    try {
+      // FIX: Explicitly provide generic type to getItemsFromStorageOnly to avoid type errors.
+      const localFlowers = api.getItemsFromStorageOnly<FlowerItem[]>('flowerItems');
+      const localFixed = api.getItemsFromStorageOnly<FixedItem[]>('fixedItems');
+      const backupData = {
+        flowerItems: localFlowers || [],
+        fixedItems: localFixed || [],
+        backupDate: new Date().toISOString(),
+      };
+      const dataStr = JSON.stringify(backupData, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', 'vitora-erp-backup.json');
+      linkElement.click();
+      linkElement.remove();
+    } catch (error) {
+      console.error("Error al descargar los datos:", error);
+      alert("No se pudo generar la copia de seguridad.");
+    }
   };
 
   const renderTable = (
@@ -176,6 +232,26 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </span>
             <span className="text-xs font-semibold text-gray-400">HISTORIAL</span>
         </button>
+      </div>
+
+       <div className="border-b border-gray-700 pb-4 mb-4">
+        <h3 className="text-lg font-bold mb-3 text-cyan-300 text-center">Sincronización y Respaldo de Datos</h3>
+        <p className="text-xs text-gray-500 mb-4 text-center">Usa estas herramientas si necesitas guardar datos ingresados sin conexión.</p>
+        <div className="flex justify-center gap-4">
+          <button onClick={handleForceSync} disabled={syncStatus === 'syncing'} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-cyan-600 hover:bg-cyan-500 text-white disabled:bg-gray-600">
+            <CloudArrowUpIcon className="w-5 h-5" /> Forzar Sincronización
+          </button>
+          <button onClick={handleDownloadData} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-gray-600 hover:bg-gray-500 text-white">
+            <ArrowDownTrayIcon className="w-5 h-5" /> Descargar Copia
+          </button>
+        </div>
+         {syncStatus !== 'idle' && (
+          <p className={`text-center text-sm mt-3 font-semibold ${
+            syncStatus === 'success' ? 'text-green-400' :
+            syncStatus === 'error' ? 'text-red-400' :
+            'text-cyan-300'
+          }`}>{syncMessage}</p>
+        )}
       </div>
 
       <h2 className="text-2xl font-bold text-center text-purple-300 -mt-4">PRECIOS DE VENTA</h2>
