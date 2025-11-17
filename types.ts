@@ -30,7 +30,8 @@ export interface User {
     _id: string;
     username: string;
     role: UserRole;
-    avatarUrl?: string; // for the logo
+    avatarUrl?: string;
+    modulePins?: { [key in View]?: string };
 }
 
 export type View = 
@@ -87,7 +88,7 @@ export interface StockItem {
 export interface FinancialSummary {
     totalRevenue: number;
     totalCostOfGoods: number;
-    wastedGoodsCost: number; // This might be complex to calculate, placeholder for now
+    wastedGoodsCost: number;
     fixedExpenses: number;
     netProfit: number;
 }
@@ -104,4 +105,17 @@ export interface FixedExpense {
     userId: string;
     name: string;
     amount: number;
+}
+
+export type StockMovementType = 'compra' | 'venta' | 'merma' | 'ajuste';
+export interface StockMovement {
+    _id?: string;
+    userId: string;
+    itemId: string;
+    itemName: string;
+    type: StockMovementType;
+    quantityChange: number;
+    quantityAfter: number;
+    relatedOrderId?: string;
+    createdAt: string;
 }

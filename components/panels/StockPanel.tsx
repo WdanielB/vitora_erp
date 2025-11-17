@@ -1,20 +1,23 @@
 
 import React, { useState, useMemo } from 'react';
-import type { StockItem } from '../../types';
+import type { StockItem, User } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
 import StockModal from '../StockModal';
+import StockHistoryModal from '../StockHistoryModal'; // Import new modal
 import * as api from '../../services/api';
 
 interface StockPanelProps {
     stockItems: StockItem[];
     onStockUpdate: () => void;
-    userId: string;
+    user: User;
+    selectedUserId: string | null;
 }
 
-const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, userId }) => {
+const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user, selectedUserId }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'add' | 'remove'>('add');
+    const [historyModalItem, setHistoryModalItem] = useState<StockItem | null>(null);
 
     const filteredItems = useMemo(() => stockItems.filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -27,16 +30,19 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
 
     const handleSaveChanges = async (updates: { itemId: string, change: number, type: 'flower' | 'fixed' }[]) => {
         try {
-            await Promise.all(updates.map(update => api.updateStock({ ...update, userId })));
-            onStockUpdate(); // Recargar todos los datos
-        } catch (error) {
-            console.error("Failed to update stock:", error);
-            // Consider adding user feedback here
+            // FIX: The result of the ternary operator for movementType was being inferred as `string`.
+            // Explicitly cast the result to 'compra' | 'merma' to match the expected type.
+            const batchUpdates = updates.map(u => ({...u, userId: user._id, movementType: (modalMode === 'add' ? 'compra' : 'merma') as 'compra' | 'merma' }));
+            await api.updateStockBatch(batchUpdates);
+            onStockUpdate();
+        } catch (error: any) {
+            console.error("Failed to update stock:", error.message);
         }
         setIsModalOpen(false);
     };
 
     const getStatus = (item: StockItem) => {
+        // ... (status logic is the same)
         if (item.quantity <= 0) {
             return <span className="px-2 py-1 text-xs font-semibold text-white bg-red-800 rounded-full">Agotado</span>;
         }
@@ -50,14 +56,16 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Control de Stock</h1>
-                <div className="flex gap-2">
-                    <button onClick={() => handleOpenModal('add')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-blue-600 hover:bg-blue-500 text-white">
-                        <PlusIcon className="w-4 h-4" /> Ingresar Mercadería
-                    </button>
-                    <button onClick={() => handleOpenModal('remove')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-orange-600 hover:bg-orange-500 text-white">
-                        <PlusIcon className="w-4 h-4" /> Registrar Salida/Pérdida
-                    </button>
-                </div>
+                {user.role === 'user' && (
+                    <div className="flex gap-2">
+                        <button onClick={() => handleOpenModal('add')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-blue-600 hover:bg-blue-500 text-white">
+                            <PlusIcon className="w-4 h-4" /> Ingresar Mercadería
+                        </button>
+                        <button onClick={() => handleOpenModal('remove')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-orange-600 hover:bg-orange-500 text-white">
+                            <PlusIcon className="w-4 h-4" /> Registrar Salida/Pérdida
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="mb-4">
@@ -78,6 +86,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                             <th scope="col" className="px-4 py-3 text-center">Cantidad Actual</th>
                             <th scope="col" className="px-4 py-3 text-center">Stock Crítico</th>
                             <th scope="col" className="px-4 py-3 text-center">Estado</th>
+                            <th scope="col" className="px-4 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -87,6 +96,9 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                                 <td className="px-4 py-3 text-center text-white font-bold">{item.quantity} {item.type === 'flower' ? 'tallos' : 'uds.'}</td>
                                 <td className="px-4 py-3 text-center text-gray-300">{item.criticalStock}</td>
                                 <td className="px-4 py-3 text-center">{getStatus(item)}</td>
+                                <td className="px-4 py-3 text-center">
+                                    <button onClick={() => setHistoryModalItem(item)} className="text-purple-400 hover:text-purple-300 font-semibold text-sm">Ver Historial</button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -100,6 +112,15 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                 stockItems={stockItems}
                 mode={modalMode}
             />
+            {historyModalItem && (
+                 <StockHistoryModal
+                    isOpen={!!historyModalItem}
+                    onClose={() => setHistoryModalItem(null)}
+                    item={historyModalItem}
+                    user={user}
+                    selectedUserId={selectedUserId}
+                />
+            )}
         </div>
     );
 };

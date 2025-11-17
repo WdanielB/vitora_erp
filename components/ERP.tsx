@@ -119,7 +119,8 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
           fixedItems={fixedItems}
         />, true);
       case 'stock':
-        return panelWrapper(<StockPanel stockItems={stock} onStockUpdate={loadData} userId={user._id} />);
+        // FIX: The StockPanel component expects a 'user' object and 'selectedUserId' prop instead of 'userId'.
+        return panelWrapper(<StockPanel stockItems={stock} onStockUpdate={loadData} user={user} selectedUserId={null} />);
       case 'orders':
         // FIX: Passed correct props to OrdersPanel, including clients, user, and onDataNeedsRefresh.
         return panelWrapper(<OrdersPanel 
