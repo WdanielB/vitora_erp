@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ServerApiVersion } = require('mongodb');
 
 const app = express();
 app.use(cors());
@@ -13,7 +13,14 @@ if (!uri) {
   throw new Error('La variable de entorno DATABASE_URL no está definida.');
 }
 
-const client = new MongoClient(uri);
+// Crear un cliente de MongoDB con las opciones recomendadas
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
 let db;
 
 // Endpoint de prueba
