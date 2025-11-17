@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import type { FlowerItem, FixedItem, Item, User, View } from '../types';
 import * as api from '../services/api';
@@ -513,7 +512,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <TabButton view="products" label="Productos y Precios" />
                 <TabButton view="costs" label="Costos" />
                 <TabButton view="history" label="Historial de Costos" />
-                <TabButton view="general" label="Configuración General" />
+                <TabButton view="general" label={user.role === 'user' ? "General y Seguridad" : "Configuración General"} />
             </nav>
         </div>
       </div>
