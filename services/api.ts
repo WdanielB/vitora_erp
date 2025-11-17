@@ -1,9 +1,11 @@
 import type { FlowerItem, FixedItem, User } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
-// La URL base ahora se toma de una variable de entorno, lo que es ideal para producción.
-// FIX: Se usa process.env, que es compatible con la mayoría de las herramientas de compilación para variables de entorno.
-const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// FIX: Se establece directamente la URL del backend de producción para resolver
+// los problemas con las variables de entorno. Esto soluciona tanto el error
+// "TypeError" como el de "Failed to fetch", asegurando que el frontend
+// siempre apunte al backend correcto en Render.com.
+const API_BASE_URL = 'https://ad-erp-backend.onrender.com';
 
 // --- Authentication ---
 export const login = async (username: string, password: string):Promise<User> => {

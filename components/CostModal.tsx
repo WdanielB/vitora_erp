@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import type { Item, FlowerItem } from '../types';
 
@@ -42,7 +41,9 @@ const CostModal: React.FC<CostModalProps> = ({ isOpen, onClose, onSave, item, it
         const updatedFixed: Partial<Item> = {
             costo: parseFloat(costo) || 0
         };
-        onSave(updatedFixed);
+        // FIX: Cast updatedFixed to Partial<FlowerItem> to satisfy the onSave prop type.
+        // This is safe because the receiving function handles both object shapes based on context.
+        onSave(updatedFixed as Partial<FlowerItem>);
     }
   };
   
