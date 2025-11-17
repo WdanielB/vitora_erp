@@ -1,44 +1,43 @@
 
 import React, { useState, useMemo } from 'react';
-import type { FlowerItem, FixedItem, StockItem } from '../../types';
+import type { StockItem } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
+import StockModal from '../StockModal';
+import * as api from '../../services/api';
 
 interface StockPanelProps {
-    flowerItems: FlowerItem[];
-    fixedItems: FixedItem[];
+    stockItems: StockItem[];
+    onStockUpdate: () => void;
+    userId: string;
 }
 
-const StockPanel: React.FC<StockPanelProps> = ({ flowerItems, fixedItems }) => {
-    // En una aplicación real, los datos de stock vendrían de la API.
-    // Aquí los simulamos basados en los items existentes.
-    const stockItems: StockItem[] = useMemo(() => {
-        const flowersAsStock: StockItem[] = flowerItems.map(f => ({
-            id: f.id,
-            name: f.name,
-            type: 'flower',
-            quantity: Math.floor(Math.random() * 200), // Cantidad aleatoria de ejemplo
-            criticalStock: (f.cantidadPorPaquete || 10) * 2, // Stock crítico de ejemplo para 2 paquetes
-            lastUpdated: new Date().toISOString(),
-        }));
-        const fixedAsStock: StockItem[] = fixedItems.map(f => ({
-            id: f.id,
-            name: f.name,
-            type: 'fixed',
-            quantity: Math.floor(Math.random() * 50),
-            criticalStock: 10,
-            lastUpdated: new Date().toISOString(),
-        }));
-        return [...flowersAsStock, ...fixedAsStock];
-    }, [flowerItems, fixedItems]);
-
+const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, userId }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    
-    const filteredItems = stockItems.filter(item => 
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState<'add' | 'remove'>('add');
+
+    const filteredItems = useMemo(() => stockItems.filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ), [stockItems, searchTerm]);
+
+    const handleOpenModal = (mode: 'add' | 'remove') => {
+        setModalMode(mode);
+        setIsModalOpen(true);
+    };
+
+    const handleSaveChanges = async (updates: { itemId: string, change: number, type: 'flower' | 'fixed' }[]) => {
+        try {
+            await Promise.all(updates.map(update => api.updateStock({ ...update, userId })));
+            onStockUpdate(); // Recargar todos los datos
+        } catch (error) {
+            console.error("Failed to update stock:", error);
+            // Consider adding user feedback here
+        }
+        setIsModalOpen(false);
+    };
 
     const getStatus = (item: StockItem) => {
-        if (item.quantity === 0) {
+        if (item.quantity <= 0) {
             return <span className="px-2 py-1 text-xs font-semibold text-white bg-red-800 rounded-full">Agotado</span>;
         }
         if (item.quantity <= item.criticalStock) {
@@ -46,16 +45,16 @@ const StockPanel: React.FC<StockPanelProps> = ({ flowerItems, fixedItems }) => {
         }
         return <span className="px-2 py-1 text-xs font-semibold text-white bg-green-700 rounded-full">En Stock</span>;
     };
-    
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Control de Stock</h1>
                 <div className="flex gap-2">
-                     <button className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-blue-600 hover:bg-blue-500 text-white">
+                    <button onClick={() => handleOpenModal('add')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-blue-600 hover:bg-blue-500 text-white">
                         <PlusIcon className="w-4 h-4" /> Ingresar Mercadería
                     </button>
-                    <button className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-orange-600 hover:bg-orange-500 text-white">
+                    <button onClick={() => handleOpenModal('remove')} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-orange-600 hover:bg-orange-500 text-white">
                         <PlusIcon className="w-4 h-4" /> Registrar Salida/Pérdida
                     </button>
                 </div>
@@ -79,24 +78,28 @@ const StockPanel: React.FC<StockPanelProps> = ({ flowerItems, fixedItems }) => {
                             <th scope="col" className="px-4 py-3 text-center">Cantidad Actual</th>
                             <th scope="col" className="px-4 py-3 text-center">Stock Crítico</th>
                             <th scope="col" className="px-4 py-3 text-center">Estado</th>
-                            <th scope="col" className="px-4 py-3 text-center">Última Actualización</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filteredItems.map(item => (
-                            <tr key={item.id} className="border-b border-gray-700 hover:bg-gray-700/40">
+                            <tr key={item.itemId} className="border-b border-gray-700 hover:bg-gray-700/40">
                                 <td className="px-4 py-3 font-medium text-white">{item.name}</td>
                                 <td className="px-4 py-3 text-center text-white font-bold">{item.quantity} {item.type === 'flower' ? 'tallos' : 'uds.'}</td>
                                 <td className="px-4 py-3 text-center text-gray-300">{item.criticalStock}</td>
                                 <td className="px-4 py-3 text-center">{getStatus(item)}</td>
-                                <td className="px-4 py-3 text-center text-gray-400 text-sm">
-                                    {new Date(item.lastUpdated).toLocaleDateString('es-ES')}
-                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+            
+            <StockModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onSave={handleSaveChanges}
+                stockItems={stockItems}
+                mode={modalMode}
+            />
         </div>
     );
 };

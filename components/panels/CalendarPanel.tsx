@@ -1,20 +1,23 @@
 
 import React from 'react';
+import type { Event, Order } from '../../types';
 
-const CalendarPanel: React.FC = () => {
-    // Datos de ejemplo
-    const importantDates = [
-        { name: "Día de San Valentín", date: "2025-02-14" },
-        { name: "Día de la Madre", date: "2025-05-11" },
-        { name: "Campaña Navideña", date: "2024-12-01" },
-    ];
+interface CalendarPanelProps {
+    events: Event[];
+    orders: Order[];
+}
+
+const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders }) => {
     
-    const todayDeliveries = [
-        { time: '10:00 AM', address: 'Calle Falsa 123, Cayma', status: 'en ruta', driver: 'Juan Pérez' },
-        { time: '11:30 AM', address: 'Av. Ejército 789, Yanahuara', status: 'pendiente', driver: 'Asignar' },
-        { time: '02:00 PM', address: 'Plaza de Paucarpata', status: 'pendiente', driver: 'Asignar' },
-        { time: '04:00 PM', address: 'Urb. La Florida C-5, Cerro Colorado', status: 'entregado', driver: 'Maria Quispe' },
-    ];
+    const isSameDay = (d1: Date, d2: Date) => {
+        return d1.getFullYear() === d2.getFullYear() &&
+               d1.getMonth() === d2.getMonth() &&
+               d1.getDate() === d2.getDate();
+    };
+    
+    const todayDeliveries = orders
+        .filter(o => isSameDay(new Date(o.deliveryDate), new Date()) && o.status !== 'cancelado')
+        .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
 
     const Countdown: React.FC<{ date: string }> = ({ date }) => {
         const calculateDaysLeft = () => {
@@ -23,6 +26,7 @@ const CalendarPanel: React.FC = () => {
             today.setHours(0, 0, 0, 0);
             eventDate.setHours(0, 0, 0, 0);
             const diffTime = eventDate.getTime() - today.getTime();
+            if (diffTime < 0) return -1;
             return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         };
         const daysLeft = calculateDaysLeft();
@@ -33,12 +37,11 @@ const CalendarPanel: React.FC = () => {
     };
     
     const getStatusChip = (status: string) => {
-        const styles = {
+        const styles: { [key: string]: string } = {
             pendiente: 'bg-yellow-400/80 text-yellow-900',
-            'en ruta': 'bg-blue-400/80 text-blue-900',
+            'en armado': 'bg-blue-400/80 text-blue-900',
             entregado: 'bg-green-500/80 text-green-900'
         };
-        // @ts-ignore
         return <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${styles[status]}`}>{status.toUpperCase()}</span>;
     };
 
@@ -50,8 +53,8 @@ const CalendarPanel: React.FC = () => {
                 <div className="md:col-span-1 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
                      <h3 className="font-bold text-lg text-amber-300 mb-4">Fechas Importantes / Campañas</h3>
                      <ul className="space-y-3">
-                         {importantDates.map(d => (
-                             <li key={d.name} className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                         {events.map(d => (
+                             <li key={d._id} className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
                                  <div>
                                      <p className="font-semibold text-white">{d.name}</p>
                                      <p className="text-xs text-gray-400">{new Date(d.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -65,14 +68,20 @@ const CalendarPanel: React.FC = () => {
                 <div className="md:col-span-2 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
                     <h3 className="font-bold text-lg text-amber-300 mb-4">Mapa de Entregas del Día</h3>
                     <div className="space-y-2">
-                        {todayDeliveries.map((delivery, i) => (
-                            <div key={i} className="grid grid-cols-12 gap-4 items-center p-3 bg-gray-700/50 rounded-lg">
-                                <div className="col-span-2 font-bold text-white text-center">{delivery.time}</div>
-                                <div className="col-span-5 text-gray-300">{delivery.address}</div>
-                                <div className="col-span-2 text-gray-400 text-sm text-center">{delivery.driver}</div>
+                        {todayDeliveries.length > 0 ? todayDeliveries.map((delivery) => (
+                            <div key={delivery._id} className="grid grid-cols-12 gap-4 items-center p-3 bg-gray-700/50 rounded-lg">
+                                <div className="col-span-3 font-bold text-white text-center">
+                                    {new Date(delivery.deliveryDate).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div className="col-span-6 text-gray-300 text-sm">
+                                    <p className="font-semibold">{delivery.customerName}</p>
+                                    <p className="text-xs text-gray-400">{delivery.address}</p>
+                                </div>
                                 <div className="col-span-3 text-center">{getStatusChip(delivery.status)}</div>
                             </div>
-                        ))}
+                        )) : (
+                            <div className="text-center p-8 text-gray-500">No hay entregas programadas para hoy.</div>
+                        )}
                     </div>
                 </div>
             </div>

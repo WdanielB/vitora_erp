@@ -1,18 +1,15 @@
-import type { FlowerItem, FixedItem, User } from '../types';
+
+import type { FlowerItem, FixedItem, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
-// FIX: Se establece directamente la URL del backend de producción para resolver
-// los problemas con las variables de entorno. Esto soluciona tanto el error
-// "TypeError" como el de "Failed to fetch", asegurando que el frontend
-// siempre apunte al backend correcto en Render.com.
 const API_BASE_URL = 'https://ad-erp-backend.onrender.com';
 
 // --- Authentication ---
-export const login = async (username: string, password: string):Promise<User> => {
+export const login = async (username: string, password: string): Promise<User> => {
     const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
@@ -22,58 +19,43 @@ export const login = async (username: string, password: string):Promise<User> =>
     return response.json();
 };
 
-// --- Funciones de LocalStorage (para respaldo y caché) ---
-
-const getItemsFromStorage = <T,>(key: string, defaultValue: T): T => {
-  try {
-    const item = window.localStorage.getItem(key);
-    if (item) {
-      return JSON.parse(item);
-    }
-    window.localStorage.setItem(key, JSON.stringify(defaultValue));
-    return defaultValue;
-  } catch (error) {
-    console.error(`Error al leer de localStorage con la clave “${key}”:`, error);
-    return defaultValue;
-  }
-};
-
-export const getItemsFromStorageOnly = <T,>(key: string): T | null => {
-  try {
-    const item = window.localStorage.getItem(key);
-    return item ? JSON.parse(item) : null;
-  } catch (error) {
-    console.error(`Error al leer de localStorage con la clave “${key}”:`, error);
-    return null;
-  }
-}
-
-const saveItemsToStorage = <T,>(key: string, value: T) => {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Error al guardar en localStorage con la clave “${key}”:`, error);
-  }
-};
-
-// --- Funciones de la API (Multi-user ready) ---
-// Generic fetch function to include userId
+// --- Generic Fetch and Update Functions ---
 const fetchData = async <T>(endpoint: string, userId: string, fallbackData: T): Promise<T> => {
+    if (!userId) {
+        console.warn(`UserId no proporcionado para ${endpoint}, devolviendo datos de respaldo.`);
+        return fallbackData;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}?userId=${userId}`);
         if (!response.ok) {
             throw new Error(`El servidor respondió con el estado: ${response.status}`);
         }
-        const data = await response.json();
-        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, data);
-        return data;
+        return await response.json();
     } catch (error) {
-        console.warn(`API: Falló la obtención de datos para ${endpoint}. Usando datos de localStorage.`, error);
-        return getItemsFromStorage<T>(endpoint.split('/')[2] + `-${userId}`, fallbackData);
+        console.warn(`API: Falló la obtención de datos para ${endpoint}.`, error);
+        return fallbackData; // Devuelve datos por defecto en caso de error de red
     }
 };
 
-// Generic update function to include userId
+const postData = async <T, R>(endpoint: string, data: T): Promise<R> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`El servidor respondió con el estado: ${response.status} - ${errorText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`API: Falló el POST en ${endpoint}.`, error);
+        throw error;
+    }
+};
+
+
 const updateData = async <T>(endpoint: string, items: T[], userId: string): Promise<T[]> => {
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -84,29 +66,30 @@ const updateData = async <T>(endpoint: string, items: T[], userId: string): Prom
         if (!response.ok) {
             throw new Error(`El servidor respondió con el estado: ${response.status}`);
         }
-        const data = await response.json();
-        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, data);
-        return data;
+        return await response.json();
     } catch (error) {
         console.error(`API: Falló la actualización de datos en ${endpoint}.`, error);
-        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, items);
         throw error;
     }
 };
 
+// --- Products ---
+export const fetchFlowerItems = (userId: string): Promise<FlowerItem[]> => fetchData('/api/flowers', userId, DEFAULT_FLOWER_ITEMS);
+export const updateFlowerItems = (items: FlowerItem[], userId: string): Promise<FlowerItem[]> => updateData('/api/flowers', items, userId);
+export const fetchFixedItems = (userId: string): Promise<FixedItem[]> => fetchData('/api/fixed-items', userId, DEFAULT_FIXED_ITEMS);
+export const updateFixedItems = (items: FixedItem[], userId: string): Promise<FixedItem[]> => updateData('/api/fixed-items', items, userId);
 
-export const fetchFlowerItems = async (userId: string): Promise<FlowerItem[]> => {
-  return fetchData('/api/flowers', userId, DEFAULT_FLOWER_ITEMS);
-};
+// --- Stock ---
+export const fetchStock = (userId: string): Promise<StockItem[]> => fetchData('/api/stock', userId, []);
+export const updateStock = (stockUpdate: { itemId: string; change: number; type: 'flower' | 'fixed'; userId: string }): Promise<StockItem> => postData('/api/stock/update', stockUpdate);
 
-export const updateFlowerItems = async (items: FlowerItem[], userId: string): Promise<FlowerItem[]> => {
-  return updateData('/api/flowers', items, userId);
-};
+// --- Orders ---
+export const fetchOrders = (userId: string): Promise<Order[]> => fetchData('/api/orders', userId, []);
+export const createOrder = (order: Omit<Order, 'createdAt'>): Promise<Order> => postData('/api/orders', order);
 
-export const fetchFixedItems = async (userId: string): Promise<FixedItem[]> => {
-  return fetchData('/api/fixed-items', userId, DEFAULT_FIXED_ITEMS);
-};
+// --- Calendar / Events ---
+export const fetchEvents = (userId: string): Promise<Event[]> => fetchData('/api/events', userId, []);
 
-export const updateFixedItems = async (items: FixedItem[], userId: string): Promise<FixedItem[]> => {
-  return updateData('/api/fixed-items', items, userId);
-};
+// --- Finance ---
+export const fetchFixedExpenses = (userId: string): Promise<FixedExpense[]> => fetchData('/api/fixed-expenses', userId, []);
+export const fetchFinancialSummary = (userId: string): Promise<FinancialSummary> => fetchData('/api/finance/summary', userId, { totalRevenue: 0, totalCostOfGoods: 0, wastedGoodsCost: 0, fixedExpenses: 0, netProfit: 0 });

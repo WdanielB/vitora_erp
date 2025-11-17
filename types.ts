@@ -45,30 +45,46 @@ export type View =
 export type OrderStatus = 'pendiente' | 'en armado' | 'entregado' | 'cancelado';
 
 export interface Order {
-    id: string;
+    _id?: string;
     userId: string;
     customerName: string;
     address: string;
     deliveryDate: string;
     status: OrderStatus;
     total: number;
-    items: { itemId: string, name: string, quantity: number, price: number }[];
+    items: { itemId: string, name: string, quantity: number, price: number, unitCost: number }[];
     floristNote?: string;
+    createdAt: string;
 }
 
 export interface StockItem {
-    id: string; // Corresponds to FlowerItem or FixedItem id
+    _id?: string;
+    itemId: string; // Corresponds to FlowerItem or FixedItem id
+    userId: string;
     name: string;
     type: 'flower' | 'fixed';
     quantity: number; // For flowers, this is in stems. For fixed, in units.
     criticalStock: number;
-    lastUpdated: string;
 }
 
 export interface FinancialSummary {
     totalRevenue: number;
     totalCostOfGoods: number;
-    wastedGoodsCost: number;
+    wastedGoodsCost: number; // This might be complex to calculate, placeholder for now
     fixedExpenses: number;
     netProfit: number;
+}
+
+export interface Event {
+    _id?: string;
+    userId: string;
+    name: string;
+    date: string;
+}
+
+export interface FixedExpense {
+    _id?: string;
+    userId: string;
+    name: string;
+    amount: number;
 }

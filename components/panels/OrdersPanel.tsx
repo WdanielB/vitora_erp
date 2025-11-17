@@ -1,17 +1,32 @@
 
 import React, { useState } from 'react';
-import type { Order, OrderStatus } from '../../types';
+import type { Order, OrderStatus, Item } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
+import OrderModal from '../OrderModal';
+import * as api from '../../services/api';
 
-const OrdersPanel: React.FC = () => {
-    // Datos de ejemplo para los pedidos
-    const [orders, setOrders] = useState<Order[]>([
-        { id: 'ORD-001', userId: 'admin', customerName: 'Ana García', address: 'Calle Falsa 123, Cayma', deliveryDate: '2024-08-15T14:00:00Z', status: 'entregado', total: 150.00, items: [] },
-        { id: 'ORD-002', userId: 'admin', customerName: 'Luis Torres', address: 'Av. Ejército 789, Yanahuara', deliveryDate: '2024-08-16T10:00:00Z', status: 'en armado', total: 250.50, items: [] },
-        { id: 'ORD-003', userId: 'admin', customerName: 'Sofía Mendoza', address: 'Urb. La Florida C-5, Cerro Colorado', deliveryDate: '2024-08-16T18:00:00Z', status: 'pendiente', total: 95.00, items: [] },
-        { id: 'ORD-004', userId: 'admin', customerName: 'Carlos Vera', address: 'Plaza de Paucarpata', deliveryDate: '2024-08-14T11:00:00Z', status: 'cancelado', total: 120.00, items: [] },
-    ]);
 
+interface OrdersPanelProps {
+    orders: Order[];
+    allItems: Item[];
+    onOrderCreated: () => void;
+    userId: string;
+}
+
+const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, onOrderCreated, userId }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    const handleCreateOrder = async (orderData: Omit<Order, 'createdAt'>) => {
+        try {
+            await api.createOrder(orderData);
+            onOrderCreated();
+        } catch(error) {
+            console.error("Failed to create order:", error);
+            // Add user feedback here
+        }
+        setIsModalOpen(false);
+    };
+    
     const getStatusChip = (status: OrderStatus) => {
         const styles = {
             pendiente: 'bg-yellow-400/80 text-yellow-900',
@@ -21,12 +36,14 @@ const OrdersPanel: React.FC = () => {
         };
         return <span className={`px-2 py-1 text-xs font-bold rounded-full ${styles[status]}`}>{status.toUpperCase()}</span>;
     };
+    
+    const sortedOrders = [...orders].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Gestión de Pedidos</h1>
-                <button className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-purple-600 hover:bg-purple-500 text-white">
+                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-purple-600 hover:bg-purple-500 text-white">
                     <PlusIcon className="w-4 h-4" /> Nuevo Pedido
                 </button>
             </div>
@@ -35,7 +52,6 @@ const OrdersPanel: React.FC = () => {
                 <table className="w-full text-left">
                     <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase">
                         <tr>
-                            <th scope="col" className="px-4 py-3">ID Pedido</th>
                             <th scope="col" className="px-4 py-3">Cliente</th>
                             <th scope="col" className="px-4 py-3">Fecha de Entrega</th>
                             <th scope="col" className="px-4 py-3 text-center">Estado</th>
@@ -44,9 +60,8 @@ const OrdersPanel: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {orders.map(order => (
-                            <tr key={order.id} className="border-b border-gray-700 hover:bg-gray-700/40">
-                                <td className="px-4 py-3 font-mono text-sm text-gray-400">{order.id}</td>
+                        {sortedOrders.map(order => (
+                            <tr key={order._id} className="border-b border-gray-700 hover:bg-gray-700/40">
                                 <td className="px-4 py-3 font-medium text-white">{order.customerName}</td>
                                 <td className="px-4 py-3 text-gray-300">
                                     {new Date(order.deliveryDate).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -58,9 +73,22 @@ const OrdersPanel: React.FC = () => {
                                 </td>
                             </tr>
                         ))}
+                         {sortedOrders.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="text-center p-6 text-gray-500">No hay pedidos registrados.</td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
+            
+            <OrderModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onSave={handleCreateOrder}
+                allItems={allItems}
+                userId={userId}
+            />
         </div>
     );
 };
