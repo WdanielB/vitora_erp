@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import type { FlowerItem, FixedItem, Item } from '../types';
+import type { FlowerItem, FixedItem, Item, User } from '../types';
 import * as api from '../services/api';
 import { CheckIcon } from './icons/CheckIcon';
 import { XIcon } from './icons/XIcon';
@@ -18,6 +18,7 @@ interface SettingsPanelProps {
   setFlowerItems: (updater: FlowerItem[] | ((prev: FlowerItem[]) => FlowerItem[])) => Promise<void>;
   fixedItems: FixedItem[];
   setFixedItems: (updater: FixedItem[] | ((prev: FixedItem[]) => FixedItem[])) => Promise<void>;
+  user: User;
 }
 
 type SettingsView = 'products' | 'costs' | 'history' | 'general';
@@ -27,22 +28,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   setFlowerItems,
   fixedItems,
   setFixedItems,
+  user
 }) => {
   const [settingsView, setSettingsView] = useState<SettingsView>('products');
   
-  // State for Product Management
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Item | FlowerItem | null>(null);
   const [productType, setProductType] = useState<'flower' | 'fixed' | null>(null);
   const [selectedFlowerId, setSelectedFlowerId] = useState<string | null>(null);
   const [selectedFixedId, setSelectedFixedId] = useState<string | null>(null);
   
-  // State for Cost Management
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
   const [editingCostItem, setEditingCostItem] = useState<Item | FlowerItem | null>(null);
   const [costItemType, setCostItemType] = useState<'flower' | 'fixed' | null>(null);
   
-  // State for History
   const allItemsForHistory = useMemo(() => [
     ...flowerItems.map(item => ({ ...item, type: 'flower' as const })),
     ...fixedItems.map(item => ({ ...item, type: 'fixed' as const }))
@@ -54,7 +53,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   }, [allItemsForHistory, selectedHistoryItemId]);
 
 
-  // State for Sync
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
 
@@ -71,14 +69,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     setIsProductModalOpen(true);
   };
 
-  const handleProductSave = async (itemData: Omit<Item, 'id' | 'costo' | 'costHistory'> & { imageUrl?: string }) => {
+  const handleProductSave = async (itemData: Omit<Item, 'id' | 'costo' | 'costHistory' | 'userId'> & { imageUrl?: string }) => {
     if (productType === 'flower') {
         await setFlowerItems(prevItems => {
-             const baseItem = editingProduct ? prevItems.find(i => i.id === editingProduct.id) : { costHistory: [] };
+             const baseItem = editingProduct ? prevItems.find(i => i.id === editingProduct.id) : { costHistory: [], userId: user._id };
              const newItem: FlowerItem = { 
                 ...(baseItem as FlowerItem),
                 ...itemData, 
-                id: editingProduct?.id || `id_${Date.now()}`,
+                id: editingProduct?.id || `f_${Date.now()}`,
+                userId: user._id,
                 imageUrl: itemData.imageUrl || ''
             };
             if (editingProduct) {
@@ -88,11 +87,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         });
     } else {
         await setFixedItems(prevItems => {
-            const baseItem = editingProduct ? prevItems.find(i => i.id === editingProduct.id) : { costHistory: [] };
+            const baseItem = editingProduct ? prevItems.find(i => i.id === editingProduct.id) : { costHistory: [], userId: user._id };
             const newItem: FixedItem = { 
               ...(baseItem as FixedItem),
               ...itemData, 
-              id: editingProduct?.id || `id_${Date.now()}`
+              id: editingProduct?.id || `t_${Date.now()}`,
+              userId: user._id,
             };
             if (editingProduct) {
                 return prevItems.map(i => i.id === editingProduct.id ? newItem : i);
@@ -169,16 +169,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     setSyncStatus('syncing');
     setSyncMessage('Sincronizando datos locales con la nube...');
     try {
-      const localFlowers = api.getItemsFromStorageOnly<FlowerItem[]>('flowerItems');
-      const localFixed = api.getItemsFromStorageOnly<FixedItem[]>('fixedItems');
-      
-      if (!localFlowers && !localFixed) {
-        throw new Error("No se encontraron datos locales para sincronizar.");
-      }
-
       await Promise.all([
-        localFlowers ? api.updateFlowerItems(localFlowers) : Promise.resolve(),
-        localFixed ? api.updateFixedItems(localFixed) : Promise.resolve(),
+         api.updateFlowerItems(flowerItems, user._id),
+         api.updateFixedItems(fixedItems, user._id)
       ]);
 
       setSyncStatus('success');
@@ -194,11 +187,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   const handleDownloadData = () => {
     try {
-      const localFlowers = api.getItemsFromStorageOnly<FlowerItem[]>('flowerItems');
-      const localFixed = api.getItemsFromStorageOnly<FixedItem[]>('fixedItems');
       const backupData = {
-        flowerItems: localFlowers || [],
-        fixedItems: localFixed || [],
+        flowerItems,
+        fixedItems,
         backupDate: new Date().toISOString(),
       };
       const dataStr = JSON.stringify(backupData, null, 2);
@@ -206,7 +197,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       
       const linkElement = document.createElement('a');
       linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', 'vitora-erp-backup.json');
+      linkElement.setAttribute('download', `vitora-erp-backup-${user.username}.json`);
       linkElement.click();
       linkElement.remove();
     } catch (error) {
@@ -469,7 +460,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   );
 
   return (
-    <div className="bg-black/20 backdrop-blur-xl border border-gray-700/50 rounded-3xl shadow-2xl shadow-purple-500/10 transition-all duration-500 min-h-[60vh]">
+    <div className="bg-black/20 backdrop-blur-xl border border-gray-700/50 rounded-3xl shadow-2xl shadow-purple-500/10 transition-all duration-500 min-h-[calc(100vh-10rem)]">
       <div className="px-6 md:px-8 pt-6">
         <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Ajustes del Sistema</h1>
         <div className="border-b border-gray-700 mt-4">

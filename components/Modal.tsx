@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Item, FlowerItem } from '../types';
 
@@ -30,7 +31,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
     e.preventDefault();
     const priceNumber = parseFloat(price);
     if (name.trim() && !isNaN(priceNumber) && priceNumber >= 0) {
-      const savedData: Omit<Item, 'id'> & { imageUrl?: string } = {
+      const savedData: Omit<Item, 'id' | 'userId'> & { imageUrl?: string } = {
         name: name.trim(),
         price: priceNumber,
         visible: item?.visible ?? true,
@@ -38,6 +39,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
       if (itemType === 'flower' || itemType === 'fixed') {
         savedData.imageUrl = imageUrl.trim();
       }
+      // @ts-ignore - userId will be added by the caller
       onSave(savedData);
     }
   };

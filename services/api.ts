@@ -1,10 +1,25 @@
 
-import type { FlowerItem, FixedItem } from '../types';
+import type { FlowerItem, FixedItem, User } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
 // La URL base ahora se toma de una variable de entorno, lo que es ideal para producción.
-// En Render, configurarás una variable de entorno llamada VITE_API_BASE_URL con la URL de tu backend.
-const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// FIX: Cast import.meta to any to access Vite environment variables without TS errors.
+const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+// --- Authentication ---
+export const login = async (username: string, password: string):Promise<User> => {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error de autenticación');
+    }
+    return response.json();
+};
 
 // --- Funciones de LocalStorage (para respaldo y caché) ---
 
@@ -14,7 +29,6 @@ const getItemsFromStorage = <T,>(key: string, defaultValue: T): T => {
     if (item) {
       return JSON.parse(item);
     }
-    // Si no hay nada, guarda el valor por defecto para la próxima vez.
     window.localStorage.setItem(key, JSON.stringify(defaultValue));
     return defaultValue;
   } catch (error) {
@@ -23,10 +37,6 @@ const getItemsFromStorage = <T,>(key: string, defaultValue: T): T => {
   }
 };
 
-/**
- * Obtiene items directamente de localStorage. Devuelve null si no hay nada.
- * Esto es útil para saber si hay datos guardados por el usuario versus datos por defecto.
- */
 export const getItemsFromStorageOnly = <T,>(key: string): T | null => {
   try {
     const item = window.localStorage.getItem(key);
@@ -45,90 +55,57 @@ const saveItemsToStorage = <T,>(key: string, value: T) => {
   }
 };
 
-
-// --- Funciones de la API ---
-
-export const fetchFlowerItems = async (): Promise<FlowerItem[]> => {
-  try {
-    console.log("API: Intentando obtener flores desde el backend...");
-    const response = await fetch(`${API_BASE_URL}/api/flowers`);
-    if (!response.ok) {
-      throw new Error(`El servidor respondió con el estado: ${response.status}`);
+// --- Funciones de la API (Multi-user ready) ---
+// Generic fetch function to include userId
+const fetchData = async <T>(endpoint: string, userId: string, fallbackData: T): Promise<T> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}?userId=${userId}`);
+        if (!response.ok) {
+            throw new Error(`El servidor respondió con el estado: ${response.status}`);
+        }
+        const data = await response.json();
+        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, data);
+        return data;
+    } catch (error) {
+        console.warn(`API: Falló la obtención de datos para ${endpoint}. Usando datos de localStorage.`, error);
+        return getItemsFromStorage<T>(endpoint.split('/')[2] + `-${userId}`, fallbackData);
     }
-    const data = await response.json();
-    console.log("API: Flores obtenidas con éxito. Guardando en caché local.");
-    saveItemsToStorage('flowerItems', data); // Guardar la última versión buena
-    return data;
-  } catch (error) {
-    console.warn("API: Falló la obtención de flores desde el backend. Usando datos de localStorage.", error);
-    return getItemsFromStorage<FlowerItem[]>('flowerItems', DEFAULT_FLOWER_ITEMS);
-  }
 };
 
-export const updateFlowerItems = async (items: FlowerItem[]): Promise<FlowerItem[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/flowers`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(items),
-    });
-
-    if (!response.ok) {
-      throw new Error(`El servidor respondió con el estado: ${response.status}`);
+// Generic update function to include userId
+const updateData = async <T>(endpoint: string, items: T[], userId: string): Promise<T[]> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items, userId }),
+        });
+        if (!response.ok) {
+            throw new Error(`El servidor respondió con el estado: ${response.status}`);
+        }
+        const data = await response.json();
+        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, data);
+        return data;
+    } catch (error) {
+        console.error(`API: Falló la actualización de datos en ${endpoint}.`, error);
+        saveItemsToStorage(endpoint.split('/')[2] + `-${userId}`, items);
+        throw error;
     }
-    
-    const data = await response.json();
-    saveItemsToStorage('flowerItems', data); // Actualizar caché
-    return data;
-
-  } catch (error) {
-    console.error("API: Falló la actualización de flores en el backend.", error);
-    // Como fallback, podríamos guardar en localStorage, pero lo ideal es manejar el error en la UI.
-    saveItemsToStorage('flowerItems', items); // Guardar localmente si falla el backend
-    throw error; // Propagar el error para que la UI pueda reaccionar
-  }
 };
 
-export const fetchFixedItems = async (): Promise<FixedItem[]> => {
-  try {
-    console.log("API: Intentando obtener items fijos desde el backend...");
-    const response = await fetch(`${API_BASE_URL}/api/fixed-items`);
-    if (!response.ok) {
-      throw new Error(`El servidor respondió con el estado: ${response.status}`);
-    }
-    const data = await response.json();
-    console.log("API: Items fijos obtenidos con éxito. Guardando en caché local.");
-    saveItemsToStorage('fixedItems', data);
-    return data;
-  } catch (error) {
-    console.warn("API: Falló la obtención de items fijos desde el backend. Usando datos de localStorage.", error);
-    return getItemsFromStorage<FixedItem[]>('fixedItems', DEFAULT_FIXED_ITEMS);
-  }
+
+export const fetchFlowerItems = async (userId: string): Promise<FlowerItem[]> => {
+  return fetchData('/api/flowers', userId, DEFAULT_FLOWER_ITEMS);
 };
 
-export const updateFixedItems = async (items: FixedItem[]): Promise<FixedItem[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/fixed-items`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(items),
-    });
+export const updateFlowerItems = async (items: FlowerItem[], userId: string): Promise<FlowerItem[]> => {
+  return updateData('/api/flowers', items, userId);
+};
 
-    if (!response.ok) {
-      throw new Error(`El servidor respondió con el estado: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    saveItemsToStorage('fixedItems', data); // Actualizar caché
-    return data;
+export const fetchFixedItems = async (userId: string): Promise<FixedItem[]> => {
+  return fetchData('/api/fixed-items', userId, DEFAULT_FIXED_ITEMS);
+};
 
-  } catch (error) {
-    console.error("API: Falló la actualización de items fijos en el backend.", error);
-    saveItemsToStorage('fixedItems', items); // Guardar localmente si falla el backend
-    throw error; // Propagar el error
-  }
+export const updateFixedItems = async (items: FixedItem[], userId: string): Promise<FixedItem[]> => {
+  return updateData('/api/fixed-items', items, userId);
 };

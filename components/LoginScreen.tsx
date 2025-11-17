@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import type { User } from '../types';
+import * as api from '../services/api';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;
@@ -10,15 +11,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        // Hardcoded credentials as requested
-        if (username.toLowerCase() === 'admin' && password === 'admin') {
-            onLogin({ username: 'Admin', role: 'admin' });
-        } else {
-            setError('Usuario o contraseña incorrectos.');
+        setIsLoading(true);
+
+        try {
+            const user = await api.login(username, password);
+            onLogin(user);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+            setIsLoading(false);
         }
     };
 
@@ -40,6 +45,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5"
                                 required
                                 autoFocus
+                                disabled={isLoading}
                             />
                         </div>
                         <div>
@@ -51,11 +57,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5"
                                 required
+                                disabled={isLoading}
+                                placeholder="La contraseña por defecto es admin.1"
                             />
                         </div>
                         {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-                        <button type="submit" className="w-full text-white bg-purple-600 hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors">
-                            Ingresar
+                        <button 
+                            type="submit" 
+                            className="w-full text-white bg-purple-600 hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors disabled:bg-purple-800 disabled:cursor-not-allowed"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? 'Ingresando...' : 'Ingresar'}
                         </button>
                     </form>
                 </div>

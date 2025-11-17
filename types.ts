@@ -13,6 +13,7 @@ export interface Item {
   imageUrl?: string;
   costo?: number;
   costHistory?: CostHistoryEntry[];
+  userId: string;
 }
 
 export interface FlowerItem extends Item {
@@ -26,6 +27,7 @@ export type FixedItem = Item;
 
 export type UserRole = 'admin' | 'florist' | 'cashier' | 'driver';
 export interface User {
+    _id: string;
     username: string;
     role: UserRole;
     avatarUrl?: string; // for the logo
@@ -40,18 +42,33 @@ export type View =
   | 'finance'
   | 'settings';
   
-// Placeholder types for future modules
+export type OrderStatus = 'pendiente' | 'en armado' | 'entregado' | 'cancelado';
+
 export interface Order {
     id: string;
+    userId: string;
     customerName: string;
     address: string;
     deliveryDate: string;
-    // ... more fields
+    status: OrderStatus;
+    total: number;
+    items: { itemId: string, name: string, quantity: number, price: number }[];
+    floristNote?: string;
 }
 
 export interface StockItem {
-    id: string;
-    itemId: string; // foreign key to FlowerItem or FixedItem
-    quantity: number;
-    // ... more fields
+    id: string; // Corresponds to FlowerItem or FixedItem id
+    name: string;
+    type: 'flower' | 'fixed';
+    quantity: number; // For flowers, this is in stems. For fixed, in units.
+    criticalStock: number;
+    lastUpdated: string;
+}
+
+export interface FinancialSummary {
+    totalRevenue: number;
+    totalCostOfGoods: number;
+    wastedGoodsCost: number;
+    fixedExpenses: number;
+    netProfit: number;
 }
