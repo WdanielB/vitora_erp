@@ -42,8 +42,6 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
   const [pinChallenge, setPinChallenge] = useState<View | null>(null);
   const [unlockedModules, setUnlockedModules] = useState<Set<View>>(new Set());
 
-  // FIX: Refactored loadData to separate the main data fetching from the admin-only user fetching.
-  // This resolves type conflicts in Promise.all and makes the data flow clearer.
   const loadData = useCallback(async (currentSelectedUserId: string | null) => {
       if (!user) return;
       try {

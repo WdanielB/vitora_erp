@@ -321,7 +321,8 @@ app.post('/api/orders', async (req, res) => {
             }
         });
         res.status(201).json(createdOrder);
-    } catch (err) {
+    } catch (err)
+        {
         console.error('Error al crear el pedido:', err);
         res.status(500).json({ error: 'Error interno del servidor al crear el pedido.' });
     } finally {

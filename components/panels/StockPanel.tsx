@@ -30,8 +30,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
 
     const handleSaveChanges = async (updates: { itemId: string, change: number, type: 'flower' | 'fixed' }[]) => {
         try {
-            // FIX: The result of the ternary operator for movementType was being inferred as `string`.
-            // Explicitly cast the result to 'compra' | 'merma' to match the expected type.
             const batchUpdates = updates.map(u => ({...u, userId: user._id, movementType: (modalMode === 'add' ? 'compra' : 'merma') as 'compra' | 'merma' }));
             await api.updateStockBatch(batchUpdates);
             onStockUpdate();
@@ -42,7 +40,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
     };
 
     const getStatus = (item: StockItem) => {
-        // ... (status logic is the same)
         if (item.quantity <= 0) {
             return <span className="px-2 py-1 text-xs font-semibold text-white bg-red-800 rounded-full">Agotado</span>;
         }

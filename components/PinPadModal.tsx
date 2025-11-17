@@ -62,7 +62,6 @@ const PinPadModal: React.FC<PinPadModalProps> = ({ isOpen, onClose, correctPin, 
                     </button>
                 </div>
             </div>
-             {/* FIX: Replaced non-standard <style jsx> with a standard <style> tag to fix the type error. */}
              <style>{`
                 @keyframes shake {
                   10%, 90% { transform: translate3d(-1px, 0, 0); }

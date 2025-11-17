@@ -32,8 +32,9 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
         if(isOpen) {
              // Reset state when modal opens
             if(clients.length > 0) {
-                setSelectedClientId(clients[0]._id!);
-                setAddress(clients[0].address || '');
+                const defaultClient = clients[0];
+                setSelectedClientId(defaultClient._id!);
+                setAddress(defaultClient.address || '');
             } else {
                  setSelectedClientId('');
                  setAddress('');

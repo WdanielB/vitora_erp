@@ -70,7 +70,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
 
   // --- Product Management Logic ---
-  // FIX: Implemented missing function bodies
   const openProductModalForNew = (type: 'flower' | 'fixed') => {
     setProductType(type);
     setEditingProduct(null);
