@@ -2,8 +2,9 @@
 import type { FlowerItem, FixedItem } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
-// Reemplaza esta URL con la URL de tu Web Service de Render
-const API_BASE_URL = 'https://vitora-backend.onrender.com';
+// La URL base ahora se toma de una variable de entorno, lo que es ideal para producción.
+// En Render, configurarás una variable de entorno llamada VITE_API_BASE_URL con la URL de tu backend.
+const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 // --- Funciones de LocalStorage (para respaldo y caché) ---
 
