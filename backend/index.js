@@ -24,7 +24,6 @@ let db;
 
 // --- Helper Functions ---
 const seedInitialDataForUser = async (userId) => {
-    // ... (Seeding logic remains the same)
     const collections = {
         flowers: db.collection('flowers'),
         fixed_items: db.collection('fixed_items'),
@@ -122,7 +121,6 @@ const createDataEndpoints = (endpointName, collectionName) => {
     });
 
     app.put(`/api/${endpointName}`, async (req, res) => {
-        // ... (PUT logic remains the same)
         const { items, userId } = req.body;
         if (!Array.isArray(items) || !userId) {
             return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
@@ -160,7 +158,7 @@ createDataEndpoints('fixed-expenses', 'fixed_expenses');
 
 // User management for admin
 app.get('/api/users', async (req, res) => {
-    const { userId, role } = req.query;
+    const { role } = req.query;
     if (role !== 'admin') {
         return res.status(403).json({ error: 'Acceso denegado.' });
     }
@@ -178,7 +176,7 @@ app.post('/api/users/pins', async (req, res) => {
         return res.status(400).json({ error: 'userId y pins son requeridos.' });
     }
     try {
-        const result = await db.collection('users').updateOne(
+        await db.collection('users').updateOne(
             { _id: new ObjectId(userId) },
             { $set: { modulePins: pins } }
         );
@@ -191,7 +189,6 @@ app.post('/api/users/pins', async (req, res) => {
 
 // Client management
 app.post('/api/clients', async (req, res) => {
-    // ... (logic remains same)
     const clientData = req.body;
     if (!clientData || !clientData.userId || !clientData.name) {
         return res.status(400).json({ error: 'Datos de cliente incompletos.' });
@@ -209,7 +206,7 @@ app.post('/api/clients', async (req, res) => {
 
 // Stock management with history
 app.post('/api/stock/update-batch', async (req, res) => {
-    const { updates } = req.body; // updates is an array of { itemId, change, userId, type, movementType }
+    const { updates } = req.body;
     if (!Array.isArray(updates) || updates.length === 0) {
         return res.status(400).json({ error: 'Se requiere un array de actualizaciones.' });
     }
@@ -222,8 +219,9 @@ app.post('/api/stock/update-batch', async (req, res) => {
 
             for (const update of updates) {
                 const { itemId, change, userId, movementType } = update;
-                const stockItem = await stockCollection.findOne({ itemId, userId }, { session });
+                if (!userId) throw new Error(`userId no proporcionado para la actualización del item ${itemId}`);
                 
+                const stockItem = await stockCollection.findOne({ itemId, userId }, { session });
                 if (!stockItem) throw new Error(`Stock item ${itemId} no encontrado para el usuario ${userId}`);
 
                 const quantityAfter = stockItem.quantity + change;
@@ -246,7 +244,7 @@ app.post('/api/stock/update-batch', async (req, res) => {
                 await movementsCollection.insertOne(movement, { session });
             }
         });
-        res.status(200).json({ success: true });
+        res.status(200).json({ success: true }); // Return a valid JSON response
     } catch (err) {
         console.error('Error en la actualización de stock por lote:', err);
         res.status(500).json({ error: 'Error interno del servidor.' });
@@ -278,7 +276,6 @@ app.get('/api/stock/history/:itemId', async (req, res) => {
 
 // Order creation with history
 app.post('/api/orders', async (req, res) => {
-    // ... updated logic
     const orderData = req.body;
     if (!orderData || !orderData.userId) {
         return res.status(400).json({ error: 'Datos de pedido y userId son requeridos.' });
@@ -321,8 +318,7 @@ app.post('/api/orders', async (req, res) => {
             }
         });
         res.status(201).json(createdOrder);
-    } catch (err)
-        {
+    } catch (err) {
         console.error('Error al crear el pedido:', err);
         res.status(500).json({ error: 'Error interno del servidor al crear el pedido.' });
     } finally {
@@ -348,7 +344,6 @@ app.get('/api/finance/summary', async (req, res) => {
             }
         }
         
-        // ... (aggregation logic is the same)
         const ordersCollection = db.collection('orders');
         const orderSummary = await ordersCollection.aggregate([
             { $match: matchQuery },

@@ -57,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, allUsers, selectedUserI
                             className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 p-1.5"
                         >
                             <option value="all">Todos</option>
-                            {allUsers.map(u => (
+                            {allUsers.filter(u => u.role !== 'admin').map(u => (
                                 <option key={u._id} value={u._id}>{u.username}</option>
                             ))}
                         </select>

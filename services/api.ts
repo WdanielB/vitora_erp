@@ -56,10 +56,10 @@ const postData = async <T, R>(endpoint: string, data: T): Promise<R> => {
         
         const text = await response.text();
         if (!response.ok) {
+            console.error(`API: Falló el POST en ${endpoint}. Respuesta: ${text}`);
             throw new Error(`El servidor respondió con el estado: ${response.status} - ${text}`);
         }
         
-        // Handle empty response body
         if (!text) {
             return {} as R;
         }
@@ -93,7 +93,7 @@ const updateData = async <T>(endpoint: string, items: T[], userId: string): Prom
 export const fetchUsers = (user: User): Promise<User[]> => fetchData('/api/users', user);
 
 // --- PIN Management ---
-export const updateUserPins = (userId: string, pins: { [key in View]?: string }): Promise<User> => {
+export const updateUserPins = (userId: string, pins: { [key in View]?: string }): Promise<{ success: boolean }> => {
     return postData(`/api/users/pins`, { userId, pins });
 };
 
@@ -105,7 +105,7 @@ export const updateFixedItems = (items: FixedItem[], userId: string): Promise<Fi
 
 // --- Stock ---
 export const fetchStock = (user: User, selectedUserId?: string | null): Promise<StockItem[]> => fetchData('/api/stock', user, selectedUserId);
-export const updateStockBatch = (updates: { itemId: string; change: number; type: 'flower' | 'fixed'; userId: string, movementType: 'compra' | 'merma' | 'ajuste' }[]): Promise<any> => postData('/api/stock/update-batch', { updates });
+export const updateStockBatch = (updates: { itemId: string; change: number; type: 'flower' | 'fixed'; userId: string, movementType: 'compra' | 'merma' | 'ajuste' }[]): Promise<{ success: boolean }> => postData('/api/stock/update-batch', { updates });
 export const fetchStockHistory = (itemId: string, user: User, selectedUserId?: string | null): Promise<StockMovement[]> => fetchData(`/api/stock/history/${itemId}`, user, selectedUserId);
 
 

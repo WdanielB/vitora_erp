@@ -142,7 +142,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
                         <div className="flex gap-2">
                             <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} required className={inputStyle}>
                                 <option value="" disabled>-- Seleccionar Cliente --</option>
-                                {clients.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                {clients.map(c => <option key={c._id} value={c._id!}>{c.name}</option>)}
                             </select>
                             <button type="button" onClick={() => setIsClientModalOpen(true)} className="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white flex-shrink-0"><PlusIcon className="w-5 h-5"/></button>
                         </div>

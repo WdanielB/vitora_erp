@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import type { StockItem, User } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
 import StockModal from '../StockModal';
-import StockHistoryModal from '../StockHistoryModal'; // Import new modal
+import StockHistoryModal from '../StockHistoryModal';
 import * as api from '../../services/api';
 
 interface StockPanelProps {
@@ -30,7 +30,8 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
 
     const handleSaveChanges = async (updates: { itemId: string, change: number, type: 'flower' | 'fixed' }[]) => {
         try {
-            const batchUpdates = updates.map(u => ({...u, userId: user._id, movementType: (modalMode === 'add' ? 'compra' : 'merma') as 'compra' | 'merma' }));
+            const movementType = modalMode === 'add' ? 'compra' : 'merma';
+            const batchUpdates = updates.map(u => ({...u, userId: user._id, movementType: movementType as 'compra' | 'merma' }));
             await api.updateStockBatch(batchUpdates);
             onStockUpdate();
         } catch (error: any) {

@@ -48,7 +48,8 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
         setIsLoading(true);
         setError(null);
         
-        const [flowers, fixed, stockData, ordersData, clientsData, eventsData, expensesData, summaryData] = await Promise.all([
+        // FIX: Explicitly type dataPromises to allow for conditional addition of fetchUsers promise.
+        const dataPromises: Promise<any>[] = [
           api.fetchFlowerItems(user, currentSelectedUserId),
           api.fetchFixedItems(user, currentSelectedUserId),
           api.fetchStock(user, currentSelectedUserId),
@@ -57,20 +58,25 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
           api.fetchEvents(user, currentSelectedUserId),
           api.fetchFixedExpenses(user, currentSelectedUserId),
           api.fetchFinancialSummary(user, currentSelectedUserId),
-        ]);
-
-        setFlowerItems(flowers);
-        setFixedItems(fixed);
-        setStock(stockData);
-        setOrders(ordersData);
-        setClients(clientsData);
-        setEvents(eventsData);
-        setFixedExpenses(expensesData);
-        setFinancialSummary(summaryData);
+        ];
 
         if (user.role === 'admin') {
-            const usersData = await api.fetchUsers(user);
-            setAllUsers(usersData);
+            dataPromises.push(api.fetchUsers(user));
+        }
+
+        const results = await Promise.all(dataPromises);
+        
+        setFlowerItems(results[0] as FlowerItem[]);
+        setFixedItems(results[1] as FixedItem[]);
+        setStock(results[2] as StockItem[]);
+        setOrders(results[3] as Order[]);
+        setClients(results[4] as Client[]);
+        setEvents(results[5] as Event[]);
+        setFixedExpenses(results[6] as FixedExpense[]);
+        setFinancialSummary(results[7] as FinancialSummary);
+
+        if (user.role === 'admin') {
+            setAllUsers(results[8] as User[]);
         }
 
       } catch (err) {
@@ -118,7 +124,8 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
   };
 
   const onUserPinsUpdate = (updatedUser: User) => {
-      setUser(updatedUser); // Update user state with new PINs
+      setUser(updatedUser);
+      sessionStorage.setItem('vitoraUser', JSON.stringify(updatedUser));
   }
 
   const renderContent = () => {
