@@ -1,5 +1,5 @@
 
-import type { FlowerItem, FixedItem, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from '../types';
+import type { FlowerItem, FixedItem, User, StockItem, Order, Event, FixedExpense, FinancialSummary, Client } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
 const API_BASE_URL = 'https://ad-erp-backend.onrender.com';
@@ -20,13 +20,13 @@ export const login = async (username: string, password: string): Promise<User> =
 };
 
 // --- Generic Fetch and Update Functions ---
-const fetchData = async <T>(endpoint: string, userId: string, fallbackData: T): Promise<T> => {
-    if (!userId) {
-        console.warn(`UserId no proporcionado para ${endpoint}, devolviendo datos de respaldo.`);
+const fetchData = async <T>(endpoint: string, user: User, fallbackData: T): Promise<T> => {
+    if (!user?._id) {
+        console.warn(`Usuario no proporcionado para ${endpoint}, devolviendo datos de respaldo.`);
         return fallbackData;
     }
     try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}?userId=${userId}`);
+        const response = await fetch(`${API_BASE_URL}${endpoint}?userId=${user._id}&role=${user.role}`);
         if (!response.ok) {
             throw new Error(`El servidor respondió con el estado: ${response.status}`);
         }
@@ -74,22 +74,26 @@ const updateData = async <T>(endpoint: string, items: T[], userId: string): Prom
 };
 
 // --- Products ---
-export const fetchFlowerItems = (userId: string): Promise<FlowerItem[]> => fetchData('/api/flowers', userId, DEFAULT_FLOWER_ITEMS);
+export const fetchFlowerItems = (user: User): Promise<FlowerItem[]> => fetchData('/api/flowers', user, DEFAULT_FLOWER_ITEMS);
 export const updateFlowerItems = (items: FlowerItem[], userId: string): Promise<FlowerItem[]> => updateData('/api/flowers', items, userId);
-export const fetchFixedItems = (userId: string): Promise<FixedItem[]> => fetchData('/api/fixed-items', userId, DEFAULT_FIXED_ITEMS);
+export const fetchFixedItems = (user: User): Promise<FixedItem[]> => fetchData('/api/fixed-items', user, DEFAULT_FIXED_ITEMS);
 export const updateFixedItems = (items: FixedItem[], userId: string): Promise<FixedItem[]> => updateData('/api/fixed-items', items, userId);
 
 // --- Stock ---
-export const fetchStock = (userId: string): Promise<StockItem[]> => fetchData('/api/stock', userId, []);
+export const fetchStock = (user: User): Promise<StockItem[]> => fetchData('/api/stock', user, []);
 export const updateStock = (stockUpdate: { itemId: string; change: number; type: 'flower' | 'fixed'; userId: string }): Promise<StockItem> => postData('/api/stock/update', stockUpdate);
 
 // --- Orders ---
-export const fetchOrders = (userId: string): Promise<Order[]> => fetchData('/api/orders', userId, []);
-export const createOrder = (order: Omit<Order, 'createdAt'>): Promise<Order> => postData('/api/orders', order);
+export const fetchOrders = (user: User): Promise<Order[]> => fetchData('/api/orders', user, []);
+export const createOrder = (order: Omit<Order, 'createdAt' | '_id'>): Promise<Order> => postData('/api/orders', order);
+
+// --- Clients ---
+export const fetchClients = (user: User): Promise<Client[]> => fetchData('/api/clients', user, []);
+export const createClient = (client: Omit<Client, '_id'>): Promise<Client> => postData('/api/clients', client);
 
 // --- Calendar / Events ---
-export const fetchEvents = (userId: string): Promise<Event[]> => fetchData('/api/events', userId, []);
+export const fetchEvents = (user: User): Promise<Event[]> => fetchData('/api/events', user, []);
 
 // --- Finance ---
-export const fetchFixedExpenses = (userId: string): Promise<FixedExpense[]> => fetchData('/api/fixed-expenses', userId, []);
-export const fetchFinancialSummary = (userId: string): Promise<FinancialSummary> => fetchData('/api/finance/summary', userId, { totalRevenue: 0, totalCostOfGoods: 0, wastedGoodsCost: 0, fixedExpenses: 0, netProfit: 0 });
+export const fetchFixedExpenses = (user: User): Promise<FixedExpense[]> => fetchData('/api/fixed-expenses', user, []);
+export const fetchFinancialSummary = (user: User): Promise<FinancialSummary> => fetchData('/api/finance/summary', user, { totalRevenue: 0, totalCostOfGoods: 0, wastedGoodsCost: 0, fixedExpenses: 0, netProfit: 0 });

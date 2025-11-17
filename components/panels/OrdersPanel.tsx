@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import type { Order, OrderStatus, Item } from '../../types';
+import type { Order, OrderStatus, Item, Client, User } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
 import OrderModal from '../OrderModal';
 import * as api from '../../services/api';
@@ -9,17 +9,18 @@ import * as api from '../../services/api';
 interface OrdersPanelProps {
     orders: Order[];
     allItems: Item[];
-    onOrderCreated: () => void;
-    userId: string;
+    clients: Client[];
+    onDataNeedsRefresh: () => void;
+    user: User;
 }
 
-const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, onOrderCreated, userId }) => {
+const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, onDataNeedsRefresh, user }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     
-    const handleCreateOrder = async (orderData: Omit<Order, 'createdAt'>) => {
+    const handleCreateOrder = async (orderData: Omit<Order, 'createdAt' | '_id'>) => {
         try {
             await api.createOrder(orderData);
-            onOrderCreated();
+            onDataNeedsRefresh();
         } catch(error) {
             console.error("Failed to create order:", error);
             // Add user feedback here
@@ -62,7 +63,7 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, onOrderCrea
                     <tbody>
                         {sortedOrders.map(order => (
                             <tr key={order._id} className="border-b border-gray-700 hover:bg-gray-700/40">
-                                <td className="px-4 py-3 font-medium text-white">{order.customerName}</td>
+                                <td className="px-4 py-3 font-medium text-white">{order.clientName}</td>
                                 <td className="px-4 py-3 text-gray-300">
                                     {new Date(order.deliveryDate).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </td>
@@ -87,7 +88,9 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, onOrderCrea
                 onClose={() => setIsModalOpen(false)}
                 onSave={handleCreateOrder}
                 allItems={allItems}
-                userId={userId}
+                clients={clients}
+                user={user}
+                onClientCreated={onDataNeedsRefresh}
             />
         </div>
     );

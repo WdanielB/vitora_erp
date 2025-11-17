@@ -9,7 +9,8 @@ import OrdersPanel from './panels/OrdersPanel';
 import CalendarPanel from './panels/CalendarPanel';
 import FinancePanel from './panels/FinancePanel';
 import SettingsPanel from './SettingsPanel';
-import type { FlowerItem, FixedItem, View, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from '../types';
+// FIX: Import Client type to handle client data.
+import type { FlowerItem, FixedItem, View, User, StockItem, Order, Event, FixedExpense, FinancialSummary, Client } from '../types';
 import * as api from '../services/api';
 
 interface ERPProps {
@@ -23,6 +24,8 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
   const [fixedItems, setFixedItems] = useState<FixedItem[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  // FIX: Added state to store client information.
+  const [clients, setClients] = useState<Client[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([]);
   const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
@@ -35,19 +38,24 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
       try {
         setIsLoading(true);
         setError(null);
-        const [flowers, fixed, stockData, ordersData, eventsData, expensesData, summaryData] = await Promise.all([
-          api.fetchFlowerItems(user._id),
-          api.fetchFixedItems(user._id),
-          api.fetchStock(user._id),
-          api.fetchOrders(user._id),
-          api.fetchEvents(user._id),
-          api.fetchFixedExpenses(user._id),
-          api.fetchFinancialSummary(user._id),
+        // FIX: Added fetching of client data.
+        const [flowers, fixed, stockData, ordersData, clientsData, eventsData, expensesData, summaryData] = await Promise.all([
+          // FIX: Pass the entire user object to fetch functions instead of just the ID.
+          api.fetchFlowerItems(user),
+          api.fetchFixedItems(user),
+          api.fetchStock(user),
+          api.fetchOrders(user),
+          api.fetchClients(user),
+          api.fetchEvents(user),
+          api.fetchFixedExpenses(user),
+          api.fetchFinancialSummary(user),
         ]);
         setFlowerItems(flowers);
         setFixedItems(fixed);
         setStock(stockData);
         setOrders(ordersData);
+        // FIX: Set the fetched client data to state.
+        setClients(clientsData);
         setEvents(eventsData);
         setFixedExpenses(expensesData);
         setFinancialSummary(summaryData);
@@ -113,7 +121,14 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
       case 'stock':
         return panelWrapper(<StockPanel stockItems={stock} onStockUpdate={loadData} userId={user._id} />);
       case 'orders':
-        return panelWrapper(<OrdersPanel orders={orders} allItems={allItems} onOrderCreated={loadData} userId={user._id} />);
+        // FIX: Passed correct props to OrdersPanel, including clients, user, and onDataNeedsRefresh.
+        return panelWrapper(<OrdersPanel 
+          orders={orders} 
+          allItems={allItems} 
+          clients={clients} 
+          onDataNeedsRefresh={loadData} 
+          user={user} 
+        />);
       case 'calendar':
         return panelWrapper(<CalendarPanel events={events} orders={orders} />);
       case 'finance':

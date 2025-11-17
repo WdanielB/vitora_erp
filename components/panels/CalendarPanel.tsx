@@ -74,7 +74,8 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders }) => {
                                     {new Date(delivery.deliveryDate).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                                 <div className="col-span-6 text-gray-300 text-sm">
-                                    <p className="font-semibold">{delivery.customerName}</p>
+                                    {/* FIX: Changed customerName to clientName to match the Order type. */}
+                                    <p className="font-semibold">{delivery.clientName}</p>
                                     <p className="text-xs text-gray-400">{delivery.address}</p>
                                 </div>
                                 <div className="col-span-3 text-center">{getStatusChip(delivery.status)}</div>

@@ -25,7 +25,7 @@ export interface FlowerItem extends Item {
 
 export type FixedItem = Item;
 
-export type UserRole = 'admin' | 'florist' | 'cashier' | 'driver';
+export type UserRole = 'admin' | 'user';
 export interface User {
     _id: string;
     username: string;
@@ -44,15 +44,32 @@ export type View =
   
 export type OrderStatus = 'pendiente' | 'en armado' | 'entregado' | 'cancelado';
 
+export interface Client {
+    _id?: string;
+    userId: string;
+    name: string;
+    phone?: string;
+    address?: string;
+}
+
+export interface OrderItem {
+    itemId?: string; // Optional for custom items
+    name: string;
+    quantity: number;
+    price: number; // Sale price
+    unitCost: number;
+}
+
 export interface Order {
     _id?: string;
     userId: string;
-    customerName: string;
+    clientId: string;
+    clientName: string;
     address: string;
     deliveryDate: string;
     status: OrderStatus;
     total: number;
-    items: { itemId: string, name: string, quantity: number, price: number, unitCost: number }[];
+    items: OrderItem[];
     floristNote?: string;
     createdAt: string;
 }

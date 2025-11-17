@@ -53,7 +53,7 @@ const seedInitialDataForUser = async (userId) => {
         await collections.stock.insertMany(initialStock);
     }
     
-    // Seed initial events and expenses (placeholders)
+    // Seed initial events and expenses
     const initialEvents = [
         { name: "Día de San Valentín", date: "2025-02-14T05:00:00.000Z", userId },
         { name: "Día de la Madre", date: "2025-05-11T05:00:00.000Z", userId },
@@ -110,24 +110,23 @@ app.post('/api/login', async (req, res) => {
 });
 
 
-// --- Data Endpoints (Multi-user) ---
-const createDataEndpoints = (appName, collectionName) => {
-    app.get(`/api/${appName}`, async (req, res) => {
-        const { userId } = req.query;
+// --- Data Endpoints (Role-Based Access Control) ---
+const createDataEndpoints = (endpointName, collectionName) => {
+    app.get(`/api/${endpointName}`, async (req, res) => {
+        const { userId, role } = req.query;
         if (!userId) return res.status(400).json({ error: 'userId es requerido.' });
+        
         try {
-            const items = await db.collection(collectionName).find({ userId }).toArray();
-            if (appName === 'flowers' || appName === 'fixed-items') {
-                 items.sort((a, b) => (parseInt(a.id.substring(1), 10) - parseInt(b.id.substring(1), 10)));
-            }
+            const query = role === 'admin' ? {} : { userId };
+            const items = await db.collection(collectionName).find(query).toArray();
             res.json(items);
         } catch (err) {
-            console.error(`Error al obtener ${appName}:`, err);
+            console.error(`Error al obtener ${endpointName}:`, err);
             res.status(500).json({ error: 'Error interno del servidor.' });
         }
     });
 
-    app.put(`/api/${appName}`, async (req, res) => {
+    app.put(`/api/${endpointName}`, async (req, res) => {
         const { items, userId } = req.body;
         if (!Array.isArray(items) || !userId) {
             return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
@@ -139,14 +138,14 @@ const createDataEndpoints = (appName, collectionName) => {
                 const collection = db.collection(collectionName);
                 await collection.deleteMany({ userId }, { session });
                 if (items.length > 0) {
-                    // Remove _id from items to avoid duplicate key error on re-insertion
                     const itemsToInsert = items.map(({ _id, ...item }) => ({ ...item, userId }));
                     await collection.insertMany(itemsToInsert, { session });
                 }
             });
-            res.status(200).json(items);
+            const updatedItems = await db.collection(collectionName).find({ userId }).toArray();
+            res.status(200).json(updatedItems);
         } catch (err) {
-            console.error(`Error al actualizar ${appName}:`, err);
+            console.error(`Error al actualizar ${endpointName}:`, err);
             res.status(500).json({ error: 'Error interno del servidor al actualizar.' });
         } finally {
             await session.endSession();
@@ -158,11 +157,29 @@ createDataEndpoints('flowers', 'flowers');
 createDataEndpoints('fixed-items', 'fixed_items');
 createDataEndpoints('stock', 'stock');
 createDataEndpoints('orders', 'orders');
+createDataEndpoints('clients', 'clients');
 createDataEndpoints('events', 'events');
 createDataEndpoints('fixed-expenses', 'fixed_expenses');
 
 
 // --- Custom Endpoints ---
+
+app.post('/api/clients', async (req, res) => {
+    const clientData = req.body;
+    if (!clientData || !clientData.userId || !clientData.name) {
+        return res.status(400).json({ error: 'Datos de cliente incompletos.' });
+    }
+    try {
+        const clientsCollection = db.collection('clients');
+        const result = await clientsCollection.insertOne(clientData);
+        const newClient = { ...clientData, _id: result.insertedId };
+        res.status(201).json(newClient);
+    } catch (err) {
+        console.error('Error al crear cliente:', err);
+        res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+});
+
 
 app.post('/api/stock/update', async (req, res) => {
     const { itemId, change, userId } = req.body;
@@ -197,16 +214,20 @@ app.post('/api/orders', async (req, res) => {
             const result = await ordersCollection.insertOne({ ...orderData, createdAt: new Date().toISOString() }, { session });
             createdOrder = { ...orderData, _id: result.insertedId, createdAt: new Date().toISOString() };
 
-            // 2. Decrement stock
+            // 2. Decrement stock for catalog items only
             const stockCollection = db.collection('stock');
-            const stockUpdates = orderData.items.map(item => {
-                return stockCollection.updateOne(
-                    { itemId: item.itemId, userId: orderData.userId },
-                    { $inc: { quantity: -item.quantity } },
-                    { session }
-                );
-            });
-            await Promise.all(stockUpdates);
+            const stockUpdates = orderData.items
+                .filter(item => item.itemId) // Filter out custom items
+                .map(item => {
+                    return stockCollection.updateOne(
+                        { itemId: item.itemId, userId: orderData.userId },
+                        { $inc: { quantity: -item.quantity } },
+                        { session }
+                    );
+                });
+            if (stockUpdates.length > 0) {
+               await Promise.all(stockUpdates);
+            }
         });
         res.status(201).json(createdOrder);
     } catch (err) {
@@ -218,31 +239,31 @@ app.post('/api/orders', async (req, res) => {
 });
 
 app.get('/api/finance/summary', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, role } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId es requerido.' });
 
     try {
-        // 1. Calculate total revenue and COGS from orders
+        const matchQuery = role === 'admin' ? {} : { userId };
+
         const ordersCollection = db.collection('orders');
         const orderSummary = await ordersCollection.aggregate([
-            { $match: { userId } },
+            { $match: matchQuery },
             { $unwind: "$items" },
             {
                 $group: {
-                    _id: "$userId",
+                    _id: role === 'admin' ? "admin_total" : "$userId",
                     totalRevenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
                     totalCostOfGoods: { $sum: { $multiply: ["$items.quantity", "$items.unitCost"] } },
                 }
             }
         ]).toArray();
 
-        // 2. Calculate total fixed expenses
         const expensesCollection = db.collection('fixed_expenses');
         const expenseSummary = await expensesCollection.aggregate([
-             { $match: { userId } },
+             { $match: matchQuery },
              {
                 $group: {
-                    _id: "$userId",
+                    _id: role === 'admin' ? "admin_total" : "$userId",
                     totalExpenses: { $sum: "$amount" }
                 }
              }
