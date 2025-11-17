@@ -9,8 +9,8 @@ import OrdersPanel from './panels/OrdersPanel';
 import CalendarPanel from './panels/CalendarPanel';
 import FinancePanel from './panels/FinancePanel';
 import SettingsPanel from './SettingsPanel';
-import type { FlowerItem, FixedItem, View, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from '../types';
-import * as api from '../services/api';
+import type { FlowerItem, FixedItem, View, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from './types';
+import * as api from './services/api';
 
 interface ERPProps {
     user: User;
@@ -99,9 +99,11 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
       return panelWrapper(<div className="flex items-center justify-center h-full text-center p-10 text-red-400">{error}</div>);
     }
     
+    const allItems = [...flowerItems, ...fixedItems];
+
     switch(view) {
       case 'dashboard':
-        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} flowerItems={flowerItems} fixedItems={fixedItems} />);
+        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} allItems={allItems} />);
       case 'quotation':
         return panelWrapper(<MainPanel
           flowerItems={flowerItems}
@@ -111,11 +113,11 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
       case 'stock':
         return panelWrapper(<StockPanel stockItems={stock} onStockUpdate={loadData} userId={user._id} />);
       case 'orders':
-        return panelWrapper(<OrdersPanel orders={orders} allItems={[...flowerItems, ...fixedItems]} onOrderCreated={loadData} userId={user._id} />);
+        return panelWrapper(<OrdersPanel orders={orders} allItems={allItems} onOrderCreated={loadData} userId={user._id} />);
       case 'calendar':
         return panelWrapper(<CalendarPanel events={events} orders={orders} />);
       case 'finance':
-        return panelWrapper(<FinancePanel summary={financialSummary} fixedExpenses={fixedExpenses} orders={orders} allItems={[...flowerItems, ...fixedItems]} />);
+        return panelWrapper(<FinancePanel summary={financialSummary} fixedExpenses={fixedExpenses} orders={orders} allItems={allItems} />);
       case 'settings':
         return <SettingsPanel
           flowerItems={flowerItems}
@@ -125,7 +127,7 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
           user={user}
         />;
       default:
-        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} flowerItems={flowerItems} fixedItems={fixedItems} />);
+        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} allItems={allItems} />);
     }
   }
 

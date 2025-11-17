@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import DashboardPanel from './panels/DashboardPanel';
@@ -9,7 +9,7 @@ import OrdersPanel from './panels/OrdersPanel';
 import CalendarPanel from './panels/CalendarPanel';
 import FinancePanel from './panels/FinancePanel';
 import SettingsPanel from './SettingsPanel';
-import type { FlowerItem, FixedItem, View, User } from '../types';
+import type { FlowerItem, FixedItem, View, User, StockItem, Order, Event, FixedExpense, FinancialSummary } from '../types';
 import * as api from '../services/api';
 
 interface ERPProps {
@@ -21,30 +21,47 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
   const [view, setView] = useState<View>('dashboard');
   const [flowerItems, setFlowerItems] = useState<FlowerItem[]>([]);
   const [fixedItems, setFixedItems] = useState<FixedItem[]>([]);
+  const [stock, setStock] = useState<StockItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([]);
+  const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadData = async () => {
+  const loadData = useCallback(async () => {
       if (!user?._id) return;
       try {
         setIsLoading(true);
         setError(null);
-        const [flowers, fixed] = await Promise.all([
+        const [flowers, fixed, stockData, ordersData, eventsData, expensesData, summaryData] = await Promise.all([
           api.fetchFlowerItems(user._id),
           api.fetchFixedItems(user._id),
+          api.fetchStock(user._id),
+          api.fetchOrders(user._id),
+          api.fetchEvents(user._id),
+          api.fetchFixedExpenses(user._id),
+          api.fetchFinancialSummary(user._id),
         ]);
         setFlowerItems(flowers);
         setFixedItems(fixed);
+        setStock(stockData);
+        setOrders(ordersData);
+        setEvents(eventsData);
+        setFixedExpenses(expensesData);
+        setFinancialSummary(summaryData);
       } catch (err) {
         setError("No se pudieron cargar los datos. Revisa tu conexión e inténtalo de nuevo.");
         console.error(err);
       } finally {
         setIsLoading(false);
       }
-    };
-    loadData();
   }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
   
   const handleSetFlowerItems = async (newItems: FlowerItem[] | ((prev: FlowerItem[]) => FlowerItem[])) => {
     const itemsToSave = typeof newItems === 'function' ? newItems(flowerItems) : newItems;
@@ -54,7 +71,6 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
     } catch (e) {
         console.error("Failed to save flower items", e);
         setError("Error al guardar las flores. Los cambios podrían no persistir.");
-        // TODO: Revert state on failure
     }
   };
 
@@ -66,7 +82,6 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
     } catch (e) {
         console.error("Failed to save fixed items", e);
         setError("Error al guardar los items fijos. Los cambios podrían no persistir.");
-        // TODO: Revert state on failure
     }
   };
 
@@ -84,9 +99,11 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
       return panelWrapper(<div className="flex items-center justify-center h-full text-center p-10 text-red-400">{error}</div>);
     }
     
+    const allItems = [...flowerItems, ...fixedItems];
+
     switch(view) {
       case 'dashboard':
-        return panelWrapper(<DashboardPanel />);
+        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} allItems={allItems} />);
       case 'quotation':
         return panelWrapper(<MainPanel
           flowerItems={flowerItems}
@@ -94,13 +111,13 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
           fixedItems={fixedItems}
         />, true);
       case 'stock':
-        return panelWrapper(<StockPanel flowerItems={flowerItems} fixedItems={fixedItems} />);
+        return panelWrapper(<StockPanel stockItems={stock} onStockUpdate={loadData} userId={user._id} />);
       case 'orders':
-        return panelWrapper(<OrdersPanel />);
+        return panelWrapper(<OrdersPanel orders={orders} allItems={allItems} onOrderCreated={loadData} userId={user._id} />);
       case 'calendar':
-        return panelWrapper(<CalendarPanel />);
+        return panelWrapper(<CalendarPanel events={events} orders={orders} />);
       case 'finance':
-        return panelWrapper(<FinancePanel />);
+        return panelWrapper(<FinancePanel summary={financialSummary} fixedExpenses={fixedExpenses} orders={orders} allItems={allItems} />);
       case 'settings':
         return <SettingsPanel
           flowerItems={flowerItems}
@@ -110,7 +127,7 @@ const ERP: React.FC<ERPProps> = ({ user, onLogout }) => {
           user={user}
         />;
       default:
-        return panelWrapper(<DashboardPanel />);
+        return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} allItems={allItems} />);
     }
   }
 

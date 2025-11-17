@@ -86,21 +86,18 @@ const DEFAULT_FLOWER_ITEMS = [
       "costHistory": [{ "date": "2023-10-27T10:00:00.000Z", "costoPaquete": 10 }]
     },
     {
-      "id": "f12", "name": "Gypsophila (L)",
-      "price": 30, "visible": true,
+      "id": "f12", "name": "Gypsophila (L) (ramos enteros )", "price": 30, "visible": true,
       "imageUrl": "https://storage.googleapis.com/gemini-prod-us-west1-assets/images/5752c0f9-2e06-4448-a0c3-f66741757833.jpeg",
       "costoPaquete": 15, "cantidadPorPaquete": 1, "merma": 0,
       "costHistory": [{ "date": "2023-10-27T10:00:00.000Z", "costoPaquete": 60 }]
     },
     {
-      "id": "f16", "name": "Clavel", "price": 3, "visible": true,
-      "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRzL4sYFFl7JzY2IIwY-aVbXkXqRA0wSg-5vQ&s",
+      "id": "f16", "name": "Clavel", "price": 3, "visible": true, "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRzL4sYFFl7JzY2IIwY-aVbXkXqRA0wSg-5vQ&s",
       "costoPaquete": 13, "cantidadPorPaquete": 24, "merma": 5,
       "costHistory": [{ "date": "2025-10-28T20:57:50.599Z", "costoPaquete": 13 }]
     },
     {
-      "id": "f17", "name": "Lisianthus", "price": 7, "visible": true,
-      "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5wDA3Jb8sQ_9sZ7p5wY9x2X3c7v8n9f0fGg&s",
+      "id": "f17", "name": "Lisianthus", "price": 7, "visible": true, "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5wDA3Jb8sQ_9sZ7p5wY9x2X3c7v8n9f0fGg&s",
       "costoPaquete": 40, "cantidadPorPaquete": 12, "merma": 1,
       "costHistory": [{ "date": "2025-10-28T22:24:01.851Z", "costoPaquete": 40 }]
     }

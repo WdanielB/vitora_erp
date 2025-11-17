@@ -41,9 +41,8 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
         if (item) {
             setOrderItems(prev => ({
                 ...prev,
-                // FIX: Operator '+' cannot be applied to types 'unknown' and 'number'.
-                // Cast the quantity to a number before performing addition to resolve the type error.
-                [item.id]: { item, quantity: Number(prev[item.id]?.quantity || 0) + 1 }
+                // FIX: Correctly handle quantity update for new or existing items to prevent runtime errors with `undefined`.
+                [item.id]: { item, quantity: (prev[item.id]?.quantity || 0) + 1 }
             }));
         }
         setSelectedItem('');
@@ -94,16 +93,19 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
 
     if (!isOpen) return null;
 
+    // FIX: Replaced styled-jsx with Tailwind CSS classes to resolve TypeScript error on the `jsx` prop.
+    const inputStyle = "bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5";
+
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
             <form onSubmit={handleSubmit} className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl shadow-2xl shadow-purple-500/20 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                 <h2 className="text-xl font-bold mb-4 text-purple-300">Nuevo Pedido</h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                     <input type="text" placeholder="Nombre del Cliente" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="input-style"/>
-                     <input type="text" placeholder="Dirección de Entrega" value={address} onChange={e => setAddress(e.target.value)} className="input-style"/>
-                     <input type="datetime-local" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} required className="input-style"/>
-                     <select value={status} onChange={e => setStatus(e.target.value as Order['status'])} className="input-style">
+                     <input type="text" placeholder="Nombre del Cliente" value={customerName} onChange={e => setCustomerName(e.target.value)} required className={inputStyle}/>
+                     <input type="text" placeholder="Dirección de Entrega" value={address} onChange={e => setAddress(e.target.value)} className={inputStyle}/>
+                     <input type="datetime-local" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} required className={inputStyle}/>
+                     <select value={status} onChange={e => setStatus(e.target.value as Order['status'])} className={inputStyle}>
                         <option value="pendiente">Pendiente</option>
                         <option value="en armado">En Armado</option>
                         <option value="entregado">Entregado</option>
@@ -112,7 +114,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
                 </div>
 
                 <div className="flex gap-2 mb-3">
-                    <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} className="input-style flex-grow">
+                    <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} className={`${inputStyle} flex-grow`}>
                         <option value="">-- Seleccionar producto --</option>
                         {allItems.filter(i => i.visible).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
@@ -145,21 +147,6 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
                     <button type="button" onClick={onClose} className="py-2 px-4 text-sm font-medium text-gray-300 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors">Cancelar</button>
                     <button type="submit" className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 transition-colors">Guardar Pedido</button>
                 </div>
-                <style jsx>{`
-                    .input-style {
-                        background-color: #374151; /* bg-gray-700 */
-                        border: 1px solid #4B5563; /* border-gray-600 */
-                        color: white;
-                        font-size: 0.875rem; /* text-sm */
-                        border-radius: 0.5rem; /* rounded-lg */
-                        padding: 0.625rem; /* p-2.5 */
-                        width: 100%;
-                    }
-                    .input-style:focus {
-                        --tw-ring-color: #A855F7; /* ring-purple-500 */
-                        border-color: #A855F7; /* border-purple-500 */
-                    }
-                `}</style>
             </form>
         </div>
     );
