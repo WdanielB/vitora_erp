@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -39,7 +38,7 @@ const seedInitialDataForUser = async (userId) => {
 
 // --- API Endpoints ---
 app.get('/', (req, res) => {
-  res.send('¡El backend de Vitora ERP está funcionando con MongoDB y autenticación!');
+  res.send('AD ERP ESTA ON LAI (stá funcionando con MongoDB y autenticación!)');
 });
 
 // --- Auth Endpoint ---
@@ -129,7 +128,9 @@ const startServer = async () => {
   try {
     await client.connect();
     console.log("Conectado exitosamente a MongoDB.");
-    db = client.db("vitoraDB"); 
+    const dbName = process.env.MONGO_DB_NAME || "vitoraDB"; 
+    db = client.db(dbName);
+    console.log(`Usando la base de datos: ${dbName}`);
     
     app.listen(PORT, () => {
       console.log(`Servidor escuchando en el puerto ${PORT}`);

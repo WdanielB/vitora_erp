@@ -1,10 +1,9 @@
-
 import type { FlowerItem, FixedItem, User } from '../types';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants';
 
 // La URL base ahora se toma de una variable de entorno, lo que es ideal para producción.
-// FIX: Cast import.meta to any to access Vite environment variables without TS errors.
-const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:3001';
+// FIX: Se usa process.env, que es compatible con la mayoría de las herramientas de compilación para variables de entorno.
+const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 // --- Authentication ---
 export const login = async (username: string, password: string):Promise<User> => {

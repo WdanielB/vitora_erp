@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { User } from '../types';
 import * as api from '../services/api';
@@ -31,7 +30,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="min-h-screen bg-gray-900 text-gray-200 flex items-center justify-center p-4 font-sans">
             <div className="w-full max-w-sm">
                  <h1 className="text-3xl font-bold text-center mb-6 text-gray-300 tracking-wider uppercase">
-                    Vitora ERP
+                    AD ERP
                  </h1>
                 <div className="bg-black/20 backdrop-blur-xl border border-gray-700/50 rounded-3xl shadow-2xl shadow-purple-500/10 p-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
@@ -58,7 +57,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5"
                                 required
                                 disabled={isLoading}
-                                placeholder="La contraseña por defecto es admin.1"
                             />
                         </div>
                         {error && <p className="text-sm text-red-400 text-center">{error}</p>}

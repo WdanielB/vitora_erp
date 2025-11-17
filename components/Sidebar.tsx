@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { View } from '../types';
 import { DashboardIcon } from './icons/DashboardIcon';
@@ -42,7 +41,7 @@ const NavItem: React.FC<{
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     return (
         <aside className="w-20 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-6 space-y-4 flex-shrink-0">
-            <div className="text-purple-500 font-bold text-2xl">V</div>
+            <div className="text-purple-500 font-bold text-xl">AD</div>
             <nav className="flex flex-col items-center space-y-3 mt-8">
                 <NavItem viewName="dashboard" label="Dashboard" currentView={currentView} setView={setView}>
                     <DashboardIcon className="w-6 h-6" />
