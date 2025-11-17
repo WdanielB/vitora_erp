@@ -24,7 +24,7 @@ interface SettingsPanelProps {
   onUserPinsUpdate: (user: User) => void;
 }
 
-type SettingsView = 'products' | 'costs' | 'history' | 'security' | 'general';
+type SettingsViewTab = 'products' | 'costs' | 'history' | 'general';
 
 const moduleNames: Record<View, string> = {
     dashboard: "Dashboard",
@@ -39,7 +39,7 @@ const moduleNames: Record<View, string> = {
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   flowerItems, setFlowerItems, fixedItems, setFixedItems, user, onUserPinsUpdate
 }) => {
-  const [settingsView, setSettingsView] = useState<SettingsView>('products');
+  const [settingsView, setSettingsView] = useState<SettingsViewTab>('products');
   
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Item | FlowerItem | null>(null);
@@ -453,58 +453,46 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </div>
             </div>
         </div>
-         <div>
-            <h3 className="text-lg font-bold mb-3 text-cyan-300">Branding</h3>
-             <p className="text-sm text-gray-500 mb-4">Configura el logo que aparecerá en el sistema y en los documentos.</p>
-             <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-                <label htmlFor="logoUrl" className="block mb-1 text-sm font-medium text-gray-400">URL del Logo</label>
-                <input
-                    type="text"
-                    id="logoUrl"
-                    placeholder="https://example.com/logo.png"
-                    className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5"
-                />
-                <p className="text-xs text-gray-500 mt-2">Esta función se implementará próximamente.</p>
-             </div>
-        </div>
+        {user.role === 'user' && (
+            <div>
+                <h3 className="text-lg font-bold mb-3 text-cyan-300">Seguridad</h3>
+                <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                    <p className="text-sm text-gray-400 mb-4">Establece un PIN de 4 dígitos para restringir el acceso a ciertos módulos. Déjalo en blanco para desactivar el bloqueo.</p>
+                    <div className="space-y-3 max-w-sm">
+                        {Object.keys(moduleNames).map(key => {
+                            const module = key as View;
+                            if (module === 'settings') return null; // Can't lock settings
+                            return (
+                                <div key={module} className="flex items-center justify-between">
+                                    <label htmlFor={`pin-${module}`} className="font-medium text-white">{moduleNames[module]}</label>
+                                    <input
+                                        type="password"
+                                        id={`pin-${module}`}
+                                        value={pins[module] || ''}
+                                        onChange={(e) => handlePinChange(module, e.target.value)}
+                                        maxLength={4}
+                                        className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-24 p-2.5 text-center tracking-[.5em]"
+                                        placeholder="----"
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="mt-6">
+                        <button onClick={handleSavePins} disabled={pinSaveStatus === 'saving'} className="py-2 px-5 text-sm font-semibold text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 transition-colors disabled:bg-cyan-800">
+                            {pinSaveStatus === 'saving' ? 'Guardando...' : 'Guardar PINs'}
+                        </button>
+                        {pinSaveStatus === 'success' && <p className="text-green-400 text-sm mt-2">¡Configuración guardada!</p>}
+                        {pinSaveStatus === 'error' && <p className="text-red-400 text-sm mt-2">Error al guardar.</p>}
+                    </div>
+                </div>
+            </div>
+        )}
      </div>
   );
   
-  const renderSecurityContent = () => (
-    <div>
-        <h3 className="text-lg font-bold mb-2 text-cyan-300">Bloqueo de Módulos por PIN</h3>
-        <p className="text-sm text-gray-500 mb-4">Establece un PIN de 4 dígitos para restringir el acceso a ciertos módulos. Déjalo en blanco para desactivar el bloqueo.</p>
-        <div className="space-y-3 max-w-sm">
-            {Object.keys(moduleNames).map(key => {
-                const module = key as View;
-                if (module === 'settings') return null; // Can't lock settings
-                return (
-                    <div key={module} className="flex items-center justify-between">
-                        <label htmlFor={`pin-${module}`} className="font-medium text-white">{moduleNames[module]}</label>
-                        <input
-                            type="password"
-                            id={`pin-${module}`}
-                            value={pins[module] || ''}
-                            onChange={(e) => handlePinChange(module, e.target.value)}
-                            maxLength={4}
-                            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-24 p-2.5 text-center tracking-[.5em]"
-                            placeholder="----"
-                        />
-                    </div>
-                );
-            })}
-        </div>
-        <div className="mt-6">
-            <button onClick={handleSavePins} disabled={pinSaveStatus === 'saving'} className="py-2 px-5 text-sm font-semibold text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 transition-colors disabled:bg-cyan-800">
-                {pinSaveStatus === 'saving' ? 'Guardando...' : 'Guardar PINs'}
-            </button>
-            {pinSaveStatus === 'success' && <p className="text-green-400 text-sm mt-2">¡Configuración guardada!</p>}
-            {pinSaveStatus === 'error' && <p className="text-red-400 text-sm mt-2">Error al guardar.</p>}
-        </div>
-    </div>
-  );
 
-  const TabButton: React.FC<{view: SettingsView, label: string}> = ({ view, label }) => (
+  const TabButton: React.FC<{view: SettingsViewTab, label: string}> = ({ view, label }) => (
       <button 
         onClick={() => setSettingsView(view)}
         className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors
@@ -525,7 +513,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <TabButton view="products" label="Productos y Precios" />
                 <TabButton view="costs" label="Costos" />
                 <TabButton view="history" label="Historial de Costos" />
-                {user.role === 'user' && <TabButton view="security" label="Seguridad y PINs" />}
                 <TabButton view="general" label="Configuración General" />
             </nav>
         </div>
@@ -535,7 +522,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         {settingsView === 'products' && renderProductsContent()}
         {settingsView === 'costs' && renderCostsContent()}
         {settingsView === 'history' && renderHistoryContent()}
-        {settingsView === 'security' && renderSecurityContent()}
         {settingsView === 'general' && renderGeneralContent()}
       </div>
 

@@ -48,7 +48,6 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
         setIsLoading(true);
         setError(null);
         
-        // FIX: Explicitly type dataPromises to allow for conditional addition of fetchUsers promise.
         const dataPromises: Promise<any>[] = [
           api.fetchFlowerItems(user, currentSelectedUserId),
           api.fetchFixedItems(user, currentSelectedUserId),
