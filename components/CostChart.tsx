@@ -1,5 +1,6 @@
+
 import React from 'react';
-import type { CostHistoryEntry } from '../types';
+import type { CostHistoryEntry } from '../types.ts';
 
 interface CostChartProps {
   data: CostHistoryEntry[];

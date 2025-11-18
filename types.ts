@@ -107,7 +107,7 @@ export interface FixedExpense {
     amount: number;
 }
 
-export type StockMovementType = 'compra' | 'venta' | 'merma' | 'ajuste';
+export type StockMovementType = 'compra' | 'venta' | 'merma' | 'ajuste' | 'cancelacion';
 export interface StockMovement {
     _id?: string;
     userId: string;

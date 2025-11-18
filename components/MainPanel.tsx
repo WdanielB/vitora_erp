@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import type { FlowerItem, FixedItem } from '../types';
-import { EyeIcon } from './icons/EyeIcon';
-import { EyeSlashIcon } from './icons/EyeSlashIcon';
+import type { FlowerItem, FixedItem } from '../types.ts';
+import { EyeIcon } from './icons/EyeIcon.tsx';
+import { EyeSlashIcon } from './icons/EyeSlashIcon.tsx';
 
 
 interface MainPanelProps {

@@ -1,12 +1,13 @@
+
 import React from 'react';
-import type { View } from '../types';
-import { DashboardIcon } from './icons/DashboardIcon';
-import { DocumentTextIcon } from './icons/DocumentTextIcon';
-import { BoxIcon } from './icons/BoxIcon';
-import { ClipboardListIcon } from './icons/ClipboardListIcon';
-import { CalendarIcon } from './icons/CalendarIcon';
-import { BanknotesIcon } from './icons/BanknotesIcon';
-import { CogIcon } from './icons/CogIcon';
+import type { View } from '../types.ts';
+import { DashboardIcon } from './icons/DashboardIcon.tsx';
+import { DocumentTextIcon } from './icons/DocumentTextIcon.tsx';
+import { BoxIcon } from './icons/BoxIcon.tsx';
+import { ClipboardListIcon } from './icons/ClipboardListIcon.tsx';
+import { CalendarIcon } from './icons/CalendarIcon.tsx';
+import { BanknotesIcon } from './icons/BanknotesIcon.tsx';
+import { CogIcon } from './icons/CogIcon.tsx';
 
 
 interface SidebarProps {

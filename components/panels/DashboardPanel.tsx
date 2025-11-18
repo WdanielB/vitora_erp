@@ -1,15 +1,17 @@
 
 import React, { useMemo } from 'react';
-import type { FinancialSummary, Order, Item } from '../../types';
-import { BanknotesIcon } from '../icons/BanknotesIcon';
-import { ChartBarIcon } from '../icons/ChartBarIcon';
-import { ClipboardListIcon } from '../icons/ClipboardListIcon';
-import { TrashIcon } from '../icons/TrashIcon';
+import type { FinancialSummary, Order, StockItem } from '../../types.ts';
+import { BanknotesIcon } from '../icons/BanknotesIcon.tsx';
+import { ChartBarIcon } from '../icons/ChartBarIcon.tsx';
+import { ClipboardListIcon } from '../icons/ClipboardListIcon.tsx';
+import { BellAlertIcon } from '../icons/BellAlertIcon.tsx';
+import { TruckIcon } from '../icons/TruckIcon.tsx';
+
 
 interface DashboardPanelProps {
     orders: Order[];
     financialSummary: FinancialSummary | null;
-    allItems: Item[];
+    stockItems: StockItem[];
 }
 
 const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, color: string }> = ({ title, value, icon, color }) => (
@@ -24,32 +26,44 @@ const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, 
     </div>
 );
 
-const SalesChart = () => (
-    <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
-        <h3 className="font-bold text-lg text-amber-300 mb-4">Ventas vs Costos (Próximamente)</h3>
-        <div className="flex justify-around items-end h-48 space-x-2">
-           <div className="flex w-full h-full items-center justify-center text-gray-500">
-                Gráfico en desarrollo
-           </div>
-        </div>
-    </div>
-);
-
-
-const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummary, allItems }) => {
+const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummary, stockItems }) => {
 
     const topProducts = useMemo(() => {
-        const productCount: { [key: string]: number } = {};
+        const productCount: { [key: string]: { quantity: number; revenue: number } } = {};
         orders.forEach(order => {
+             if (order.status === 'cancelado') return;
             order.items.forEach(item => {
-                productCount[item.name] = (productCount[item.name] || 0) + item.quantity;
+                if (!productCount[item.name]) {
+                    productCount[item.name] = { quantity: 0, revenue: 0 };
+                }
+                productCount[item.name].quantity += item.quantity;
+                productCount[item.name].revenue += item.quantity * item.price;
             });
         });
 
         return Object.entries(productCount)
-            .sort(([, countA], [, countB]) => countB - countA)
+            .sort(([, a], [, b]) => b.revenue - a.revenue)
             .slice(0, 5)
-            .map(([name, sold]) => ({ name, sold }));
+            .map(([name, data]) => ({ name, sold: data.quantity }));
+    }, [orders]);
+    
+     const criticalStockItems = useMemo(() => {
+        return stockItems
+            .filter(item => item.quantity <= item.criticalStock && item.quantity > 0)
+            .sort((a, b) => a.quantity - b.quantity);
+    }, [stockItems]);
+
+    const upcomingDeliveries = useMemo(() => {
+        const now = new Date();
+        const next7Days = new Date();
+        next7Days.setDate(now.getDate() + 7);
+
+        return orders
+            .filter(order => {
+                const deliveryDate = new Date(order.deliveryDate);
+                return deliveryDate >= now && deliveryDate <= next7Days && order.status !== 'entregado' && order.status !== 'cancelado';
+            })
+            .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
     }, [orders]);
     
     return (
@@ -58,12 +72,44 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummar
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                 <StatCard title="Ventas del Mes" value={`S/ ${financialSummary?.totalRevenue.toFixed(2) || '0.00'}`} icon={<BanknotesIcon className="w-6 h-6 text-white"/>} color="bg-green-500/80" />
                 <StatCard title="Ganancia Neta" value={`S/ ${financialSummary?.netProfit.toFixed(2) || '0.00'}`} icon={<ChartBarIcon className="w-6 h-6 text-white"/>} color="bg-cyan-500/80" />
-                <StatCard title="Pedidos del Mes" value={orders.length.toString()} icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} color="bg-purple-500/80" />
-                <StatCard title="Costo por Merma" value={`S/ ${financialSummary?.wastedGoodsCost.toFixed(2) || '0.00'}`} icon={<TrashIcon className="w-6 h-6 text-white"/>} color="bg-red-500/80" />
+                <StatCard title="Pedidos Activos" value={orders.filter(o => o.status === 'pendiente' || o.status === 'en armado').length.toString()} icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} color="bg-purple-500/80" />
+                <StatCard title="Stock Crítico" value={criticalStockItems.length.toString()} icon={<BellAlertIcon className="w-6 h-6 text-white"/>} color="bg-yellow-500/80" />
             </div>
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                    <SalesChart />
+                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                        <h3 className="font-bold text-lg text-amber-300 mb-4 flex items-center gap-2"><TruckIcon className="w-5 h-5"/> Próximas Entregas (7 días)</h3>
+                        <ul className="space-y-2 max-h-48 overflow-y-auto">
+                            {upcomingDeliveries.map(order => (
+                                <li key={order._id} className="flex justify-between items-center text-sm p-2 bg-gray-700/50 rounded-md">
+                                    <div>
+                                        <p className="font-medium text-white">{order.clientName}</p>
+                                        <p className="text-xs text-gray-400">{order.address}</p>
+                                    </div>
+                                    <span className="font-bold text-gray-300 text-xs">
+                                        {new Date(order.deliveryDate).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })}
+                                    </span>
+                                </li>
+                            ))}
+                            {upcomingDeliveries.length === 0 && (
+                                <li className="text-center text-gray-500 pt-8">No hay entregas programadas.</li>
+                            )}
+                        </ul>
+                    </div>
+                     <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                        <h3 className="font-bold text-lg text-amber-300 mb-4 flex items-center gap-2"><BellAlertIcon className="w-5 h-5"/> Stock Crítico</h3>
+                        <ul className="space-y-2 max-h-48 overflow-y-auto">
+                            {criticalStockItems.map(item => (
+                                <li key={item.itemId} className="flex justify-between items-center text-sm p-2 bg-gray-700/50 rounded-md">
+                                    <span className="font-medium text-white">{item.name}</span>
+                                    <span className="font-bold text-yellow-400">{item.quantity} uds</span>
+                                </li>
+                            ))}
+                            {criticalStockItems.length === 0 && (
+                                <li className="text-center text-gray-500 pt-8">Todo el stock está en niveles óptimos.</li>
+                            )}
+                        </ul>
+                    </div>
                 </div>
                 <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
                     <h3 className="font-bold text-lg text-amber-300 mb-4">Productos Más Vendidos</h3>

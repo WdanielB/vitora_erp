@@ -1,7 +1,16 @@
-
-import type { FlowerItem, FixedItem } from './types';
+import type { FlowerItem, FixedItem, View } from './types.ts';
 
 const INITIAL_DATE = new Date('2023-10-27T10:00:00Z').toISOString();
+
+export const moduleNames: Record<View, string> = {
+    dashboard: "Dashboard",
+    quotation: "Cotización",
+    stock: "Control de Stock",
+    orders: "Pedidos",
+    calendar: "Agenda",
+    finance: "Finanzas",
+    settings: "Ajustes"
+};
 
 // FIX: Added missing 'userId' property to each flower item object to satisfy the FlowerItem type.
 export const DEFAULT_FLOWER_ITEMS: FlowerItem[] = [

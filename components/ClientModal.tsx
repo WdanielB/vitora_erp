@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import type { Client } from '../types';
-import * as api from '../services/api';
+import type { Client } from '../types.ts';
+import * as api from '../services/api.ts';
 
 interface ClientModalProps {
   isOpen: boolean;

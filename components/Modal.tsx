@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import type { Item, FlowerItem } from '../types';
+import type { Item, FlowerItem } from '../types.ts';
 
 interface ModalProps {
   isOpen: boolean;

@@ -1,32 +1,45 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface PinPadModalProps {
     isOpen: boolean;
     onClose: () => void;
     correctPin: string;
     onSuccess: () => void;
+    moduleName: string;
 }
 
-const PinPadModal: React.FC<PinPadModalProps> = ({ isOpen, onClose, correctPin, onSuccess }) => {
+const PinPadModal: React.FC<PinPadModalProps> = ({ isOpen, onClose, correctPin, onSuccess, moduleName }) => {
     const [pin, setPin] = useState('');
     const [error, setError] = useState(false);
 
+    useEffect(() => {
+        if (!isOpen) {
+            setPin('');
+            setError(false);
+        }
+    }, [isOpen]);
+
     const handleKeyPress = (key: string) => {
-        setError(false);
+        if (error) {
+            setPin(key);
+            setError(false);
+            return;
+        }
         if (pin.length < 4) {
-            const newPin = pin + key;
-            setPin(newPin);
-            if (newPin.length === 4) {
-                if (newPin === correctPin) {
-                    onSuccess();
-                } else {
-                    setError(true);
-                    setTimeout(() => setPin(''), 500);
-                }
-            }
+            setPin(prev => prev + key);
         }
     };
+    
+    useEffect(() => {
+        if (pin.length === 4) {
+            if (pin === correctPin) {
+                onSuccess();
+            } else {
+                setError(true);
+            }
+        }
+    }, [pin, correctPin, onSuccess]);
+
 
     const handleDelete = () => {
         setPin(pin.slice(0, -1));
@@ -34,7 +47,7 @@ const PinPadModal: React.FC<PinPadModalProps> = ({ isOpen, onClose, correctPin, 
     };
 
     const pinDots = Array(4).fill(0).map((_, i) => (
-        <div key={i} className={`w-4 h-4 rounded-full transition-colors ${i < pin.length ? 'bg-purple-400' : 'bg-gray-600'}`}></div>
+        <div key={i} className={`w-4 h-4 rounded-full transition-colors ${i < pin.length ? (error ? 'bg-red-500' : 'bg-purple-400') : 'bg-gray-600'}`}></div>
     ));
 
     const numberButtons = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
@@ -48,9 +61,11 @@ const PinPadModal: React.FC<PinPadModalProps> = ({ isOpen, onClose, correctPin, 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-[70] p-4" onClick={onClose}>
             <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-xs shadow-2xl shadow-purple-500/20" onClick={e => e.stopPropagation()}>
-                <h2 className="text-lg font-bold text-center text-purple-300">Acceso Restringido</h2>
-                <p className="text-sm text-center text-gray-400 mb-4">Ingresa el PIN para continuar</p>
-                <div className={`flex justify-center gap-4 mb-4 ${error ? 'animate-shake' : ''}`}>{pinDots}</div>
+                <h2 className="text-lg font-bold text-center text-purple-300">Desbloquear {moduleName}</h2>
+                <p className="text-sm text-center text-gray-400 mb-2">Ingresa el PIN para continuar</p>
+                <div className={`flex justify-center gap-4 ${error ? 'animate-shake' : ''}`}>{pinDots}</div>
+                <p className="text-sm text-center text-red-400 h-5 mb-2">{error ? 'PIN incorrecto' : ''}</p>
+                
                 <div className="grid grid-cols-3 gap-3">
                     {numberButtons}
                     <div />

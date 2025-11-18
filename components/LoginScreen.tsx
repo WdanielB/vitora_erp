@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
-import type { User } from '../types';
-import * as api from '../services/api';
+import type { User } from '../types.ts';
+import * as api from '../services/api.ts';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;

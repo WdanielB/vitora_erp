@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import type { StockItem, StockMovement, StockMovementType, User } from '../types';
-import * as api from '../services/api';
+import type { StockItem, StockMovement, StockMovementType, User } from '../types.ts';
+import * as api from '../services/api.ts';
 
 interface StockHistoryModalProps {
   isOpen: boolean;
@@ -35,11 +35,13 @@ const StockHistoryModal: React.FC<StockHistoryModalProps> = ({ isOpen, onClose, 
     if (!isOpen) return null;
 
     const getTypeChip = (type: StockMovementType) => {
+        // FIX: Added 'cancelacion' to the styles object to handle all possible movement types.
         const styles: Record<StockMovementType, string> = {
             compra: 'bg-blue-600 text-white',
             venta: 'bg-green-600 text-white',
             merma: 'bg-orange-600 text-white',
             ajuste: 'bg-gray-500 text-white',
+            cancelacion: 'bg-red-700 text-white',
         };
         return <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${styles[type]}`}>{type.toUpperCase()}</span>;
     };

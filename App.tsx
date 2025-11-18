@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import LoginScreen from './components/LoginScreen';
-import ERP from './components/ERP';
-import type { User } from './types';
+import LoginScreen from './components/LoginScreen.tsx';
+import ERP from './components/ERP.tsx';
+import type { User } from './types.ts';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);

@@ -6,7 +6,8 @@ interface StockModalProps {
     onClose: () => void;
     onSave: (updates: { itemId: string, change: number, type: 'flower' | 'fixed' }[]) => void;
     stockItems: StockItem[];
-    mode: 'add' | 'remove';
+    // FIX: Add 'ajuste' to the mode type to support stock adjustments.
+    mode: 'add' | 'remove' | 'ajuste';
 }
 
 const StockModal: React.FC<StockModalProps> = ({ isOpen, onClose, onSave, stockItems, mode }) => {
@@ -28,18 +29,31 @@ const StockModal: React.FC<StockModalProps> = ({ isOpen, onClose, onSave, stockI
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const changes = Object.entries(updates)
-            // FIX: Operator '>' cannot be applied to types 'unknown' and 'number'.
-            // Explicitly cast `change` to a number before comparison to resolve the type error.
-            .filter(([, change]) => Number(change) > 0)
-            .map(([itemId, change]) => {
+            .map(([itemId, value]) => {
                 const item = stockItems.find(si => si.itemId === itemId);
-                const numericChange = Number(change);
+                if (!item) return null;
+                const numericValue = Number(value);
+
+                if (mode === 'ajuste') {
+                    // For adjustments, calculate the difference between the new total and the current quantity.
+                    return {
+                        itemId,
+                        change: numericValue - item.quantity,
+                        type: item.type,
+                    };
+                }
+                
+                // For 'add' and 'remove', the value is the amount to change by.
                 return {
                     itemId,
-                    change: mode === 'add' ? numericChange : -numericChange,
-                    type: item!.type,
+                    change: mode === 'add' ? numericValue : -numericValue,
+                    type: item.type,
                 };
-            });
+            })
+            // Filter out any items that didn't change or were not found.
+            .filter((change): change is { itemId: string; change: number; type: 'flower' | 'fixed'; } => 
+                change !== null && change.change !== 0
+            );
         
         if (changes.length > 0) {
             onSave(changes);
@@ -49,46 +63,51 @@ const StockModal: React.FC<StockModalProps> = ({ isOpen, onClose, onSave, stockI
 
     if (!isOpen) return null;
     
-    const title = mode === 'add' ? 'Ingresar Mercadería' : 'Registrar Salida / Pérdida';
-    const buttonText = mode === 'add' ? 'Registrar Ingreso' : 'Registrar Salida';
+    // FIX: Update text content to reflect the current mode, including 'ajuste'.
+    const title = mode === 'add' ? 'Ingresar Mercadería' : mode === 'remove' ? 'Registrar Salida / Pérdida' : 'Ajuste Manual de Stock';
+    const buttonText = mode === 'add' ? 'Registrar Ingreso' : mode === 'remove' ? 'Registrar Salida' : 'Guardar Ajuste';
+    const description = mode === 'add' 
+        ? 'Ingresa la cantidad de unidades que han llegado para cada producto.' 
+        : mode === 'remove' 
+        ? 'Ingresa la cantidad de unidades utilizadas o perdidas (merma).'
+        : 'Ingresa la <strong>nueva cantidad total</strong> en stock para cada producto.';
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl shadow-purple-500/20 flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-4 text-purple-300">{title}</h2>
-                <p className="text-sm text-gray-400 mb-4">
-                    {mode === 'add' 
-                        ? 'Ingresa la cantidad de unidades que han llegado para cada producto.' 
-                        : 'Ingresa la cantidad de unidades utilizadas o perdidas (merma).'}
-                </p>
-                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2">
-                    <div className="space-y-3">
-                        {stockItems.map(item => (
-                            <div key={item.itemId} className="flex items-center justify-between gap-4">
-                                <label htmlFor={item.itemId} className="flex-1 text-sm font-medium text-white">{item.name}</label>
-                                <input
-                                    type="number"
-                                    id={item.itemId}
-                                    value={updates[item.itemId] || ''}
-                                    onChange={(e) => handleUpdate(item.itemId, e.target.value)}
-                                    className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-24 p-2 text-center"
-                                    min="0"
-                                    step="1"
-                                    placeholder="0"
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </form>
-                 <div className="flex justify-end gap-3 pt-4 mt-auto">
+            <form onSubmit={handleSubmit} className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl shadow-purple-500/20 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6 flex-shrink-0">
+                    <h2 className="text-xl font-bold mb-4 text-purple-300">{title}</h2>
+                    <p className="text-sm text-gray-400" dangerouslySetInnerHTML={{ __html: description }}></p>
+                </div>
+
+                <div className="flex-grow overflow-y-auto px-6 space-y-3">
+                    {stockItems.map(item => (
+                        <div key={item.itemId} className="flex items-center justify-between gap-4">
+                            <label htmlFor={item.itemId} className="flex-1 text-sm font-medium text-white">
+                                {item.name} {mode === 'ajuste' && `(actual: ${item.quantity})`}
+                            </label>
+                            <input
+                                type="number"
+                                id={item.itemId}
+                                value={updates[item.itemId] || ''}
+                                onChange={(e) => handleUpdate(item.itemId, e.target.value)}
+                                className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-24 p-2 text-center"
+                                min="0"
+                                step="1"
+                                placeholder={mode === 'ajuste' ? item.quantity.toString() : "0"}
+                            />
+                        </div>
+                    ))}
+                </div>
+                 <div className="flex justify-end gap-3 p-6 mt-auto flex-shrink-0">
                     <button type="button" onClick={onClose} className="py-2 px-4 text-sm font-medium text-gray-300 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors">
                         Cancelar
                     </button>
-                    <button onClick={handleSubmit} className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 transition-colors">
+                    <button type="submit" className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 transition-colors">
                         {buttonText}
                     </button>
                 </div>
-            </div>
+            </form>
         </div>
     );
 };

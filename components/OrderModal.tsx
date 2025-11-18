@@ -1,25 +1,28 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Order, Item, FlowerItem, FixedItem, Client, User, OrderItem } from '../types';
-import { PlusIcon } from './icons/PlusIcon';
-import { TrashIcon } from './icons/TrashIcon';
-import ClientModal from './ClientModal';
+import type { Order, Item, FlowerItem, FixedItem, Client, User, OrderItem, OrderStatus } from '../types.ts';
+import { PlusIcon } from './icons/PlusIcon.tsx';
+import { TrashIcon } from './icons/TrashIcon.tsx';
+import ClientModal from './ClientModal.tsx';
 
 interface OrderModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (order: Omit<Order, 'createdAt' | '_id'>) => void;
+    // FIX: Allow onSave to handle both new (Omit) and existing (Order) objects.
+    onSave: (order: Omit<Order, 'createdAt' | '_id'> | Order) => void;
     allItems: Item[];
     clients: Client[];
     user: User;
     onClientCreated: () => void;
+    // FIX: Add existingOrder prop to allow editing.
+    existingOrder?: Order | null;
 }
 
-const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allItems, clients, user, onClientCreated }) => {
+const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allItems, clients, user, onClientCreated, existingOrder }) => {
     const [selectedClientId, setSelectedClientId] = useState('');
     const [address, setAddress] = useState('');
     const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().substring(0, 16));
-    const [status, setStatus] = useState<Order['status']>('pendiente');
+    const [status, setStatus] = useState<OrderStatus>('pendiente');
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
     
     const [selectedCatalogItem, setSelectedCatalogItem] = useState('');
@@ -29,17 +32,40 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     
     useEffect(() => {
-        if(clients.length > 0 && !selectedClientId) {
-            setSelectedClientId(clients[0]._id!);
+        if(isOpen) {
+            if (existingOrder) {
+                // Populate state when editing an existing order
+                setSelectedClientId(existingOrder.clientId);
+                setAddress(existingOrder.address);
+                setDeliveryDate(new Date(existingOrder.deliveryDate).toISOString().substring(0, 16));
+                setStatus(existingOrder.status);
+                setOrderItems(existingOrder.items);
+            } else {
+                 // Reset state for a new order
+                if(clients.length > 0) {
+                    const defaultClient = clients[0];
+                    setSelectedClientId(defaultClient._id!);
+                    setAddress(defaultClient.address || '');
+                } else {
+                     setSelectedClientId('');
+                     setAddress('');
+                }
+                setDeliveryDate(new Date().toISOString().substring(0, 16));
+                setStatus('pendiente');
+                setOrderItems([]);
+            }
         }
-    }, [clients, selectedClientId]);
+    }, [isOpen, existingOrder, clients]);
 
     useEffect(() => {
-        const client = clients.find(c => c._id === selectedClientId);
-        if (client) {
-            setAddress(client.address || '');
+        // Automatically update address when client changes, but only for new orders
+        if (!existingOrder) {
+            const client = clients.find(c => c._id === selectedClientId);
+            if (client) {
+                setAddress(client.address || '');
+            }
         }
-    }, [selectedClientId, clients]);
+    }, [selectedClientId, clients, existingOrder]);
 
 
     const calculateUnitCost = (item: Item): number => {
@@ -64,7 +90,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
             setOrderItems(prev => {
                 const existing = prev.find(oi => oi.itemId === item.id);
                 if(existing) {
-                    return prev.map(oi => oi.itemId === item.id ? {...oi, quantity: oi.quantity + 1} : oi);
+                    return prev.map(oi => oi.itemId === item.id ? {...oi, quantity: Number(oi.quantity) + 1} : oi);
                 }
                 return [...prev, { itemId: item.id, name: item.name, quantity: 1, price: item.price, unitCost: calculateUnitCost(item) }];
             });
@@ -103,24 +129,32 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
             alert("Por favor, seleccione un cliente y añada al menos un producto.");
             return;
         }
-
-        const newOrder: Omit<Order, 'createdAt' | '_id'> = {
-            userId: user._id,
-            clientId: selectedClient._id!,
-            clientName: selectedClient.name,
-            address,
-            deliveryDate: new Date(deliveryDate).toISOString(),
-            status,
-            total,
-            items: orderItems,
-        };
-        onSave(newOrder);
-        // Reset state
-        setSelectedClientId(clients.length > 0 ? clients[0]._id! : '');
-        setAddress('');
-        setDeliveryDate(new Date().toISOString().substring(0, 16));
-        setStatus('pendiente');
-        setOrderItems([]);
+        
+        if (existingOrder) {
+             const updatedOrder: Order = {
+                ...existingOrder,
+                clientId: selectedClient._id!,
+                clientName: selectedClient.name,
+                address,
+                deliveryDate: new Date(deliveryDate).toISOString(),
+                status,
+                total,
+                items: orderItems,
+            };
+            onSave(updatedOrder);
+        } else {
+            const newOrder: Omit<Order, 'createdAt' | '_id'> = {
+                userId: user._id,
+                clientId: selectedClient._id!,
+                clientName: selectedClient.name,
+                address,
+                deliveryDate: new Date(deliveryDate).toISOString(),
+                status,
+                total,
+                items: orderItems,
+            };
+            onSave(newOrder);
+        }
     };
     
     if (!isOpen) return null;
@@ -129,51 +163,51 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
     return (
         <>
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <form onSubmit={handleSubmit} className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-3xl shadow-2xl shadow-purple-500/20 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-4 text-purple-300">Nuevo Pedido</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className="flex gap-2">
-                        <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} required className={inputStyle}>
-                            <option value="">-- Seleccionar Cliente --</option>
-                            {clients.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                        </select>
-                        <button type="button" onClick={() => setIsClientModalOpen(true)} className="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white flex-shrink-0"><PlusIcon className="w-5 h-5"/></button>
-                    </div>
-                     <input type="text" placeholder="Dirección de Entrega" value={address} onChange={e => setAddress(e.target.value)} className={inputStyle}/>
-                     <input type="datetime-local" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} required className={inputStyle}/>
-                     <select value={status} onChange={e => setStatus(e.target.value as Order['status'])} className={inputStyle}>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="en armado">En Armado</option>
-                        <option value="entregado">Entregado</option>
-                        <option value="cancelado">Cancelado</option>
-                     </select>
-                </div>
-
-                <div className="border-t border-gray-700 pt-4 space-y-3">
-                    {/* Add Catalog Item */}
-                    <div>
-                        <label className="text-sm font-semibold text-gray-400">Añadir Producto del Catálogo</label>
-                         <div className="flex gap-2 mt-1">
-                            <select value={selectedCatalogItem} onChange={e => setSelectedCatalogItem(e.target.value)} className={`${inputStyle} flex-grow`}>
-                                <option value="">-- Seleccionar producto --</option>
-                                {allItems.filter(i => i.visible).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <form onSubmit={handleSubmit} className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-3xl shadow-2xl shadow-purple-500/20 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6 flex-shrink-0">
+                    <h2 className="text-xl font-bold mb-4 text-purple-300">{existingOrder ? 'Editar Pedido' : 'Nuevo Pedido'}</h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="flex gap-2">
+                            <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} required className={inputStyle}>
+                                <option value="" disabled>-- Seleccionar Cliente --</option>
+                                {clients.map(c => <option key={c._id} value={c._id!}>{c.name}</option>)}
                             </select>
-                            <button type="button" onClick={handleAddCatalogItem} className="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white"><PlusIcon className="w-5 h-5"/></button>
+                            <button type="button" onClick={() => setIsClientModalOpen(true)} className="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white flex-shrink-0"><PlusIcon className="w-5 h-5"/></button>
                         </div>
+                         <input type="text" placeholder="Dirección de Entrega" value={address} onChange={e => setAddress(e.target.value)} className={inputStyle}/>
+                         <input type="datetime-local" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} required className={inputStyle}/>
+                         <select value={status} onChange={e => setStatus(e.target.value as Order['status'])} className={inputStyle}>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="en armado">En Armado</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="cancelado">Cancelado</option>
+                         </select>
                     </div>
-                    {/* Add Custom Item */}
-                    <div>
-                        <label className="text-sm font-semibold text-gray-400">Añadir Item Personalizado</label>
-                        <div className="flex gap-2 mt-1">
-                            <input type="text" placeholder="Nombre del Item (ej. Ramo de Flores)" value={customItemName} onChange={e => setCustomItemName(e.target.value)} className={`${inputStyle} flex-grow`}/>
-                            <input type="number" placeholder="Precio (S/)" value={customItemPrice} onChange={e => setCustomItemPrice(e.target.value)} className={`${inputStyle} w-28`}/>
-                            <button type="button" onClick={handleAddCustomItem} className="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white"><PlusIcon className="w-5 h-5"/></button>
+
+                    <div className="border-t border-gray-700 pt-4 space-y-3">
+                        <div>
+                            <label className="text-sm font-semibold text-gray-400">Añadir Producto del Catálogo</label>
+                             <div className="flex gap-2 mt-1">
+                                <select value={selectedCatalogItem} onChange={e => setSelectedCatalogItem(e.target.value)} className={`${inputStyle} flex-grow`}>
+                                    <option value="">-- Seleccionar producto --</option>
+                                    {allItems.filter(i => i.visible).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                </select>
+                                <button type="button" onClick={handleAddCatalogItem} className="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white"><PlusIcon className="w-5 h-5"/></button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-sm font-semibold text-gray-400">Añadir Item Personalizado</label>
+                            <div className="flex gap-2 mt-1">
+                                <input type="text" placeholder="Nombre del Item (ej. Ramo de Flores)" value={customItemName} onChange={e => setCustomItemName(e.target.value)} className={`${inputStyle} flex-grow`}/>
+                                <input type="number" placeholder="Precio (S/)" value={customItemPrice} onChange={e => setCustomItemPrice(e.target.value)} className={`${inputStyle} w-28`}/>
+                                <button type="button" onClick={handleAddCustomItem} className="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white"><PlusIcon className="w-5 h-5"/></button>
+                            </div>
                         </div>
                     </div>
                 </div>
                 
-                <div className="flex-grow overflow-y-auto border-y border-gray-700 my-4 py-2 space-y-2">
+                <div className="flex-grow overflow-y-auto border-y border-gray-700 my-4 py-2 px-6 space-y-2">
                     {orderItems.map((orderItem, index) => (
                         <div key={index} className="flex justify-between items-center text-sm">
                             <span className="font-semibold">{orderItem.name}</span>
@@ -190,14 +224,16 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
                     )}
                 </div>
                 
-                <div className="flex justify-between items-center">
-                    <span className="text-xl font-bold text-gray-300">Total:</span>
-                    <span className="text-2xl font-bold text-green-400">S/ {total.toFixed(2)}</span>
-                </div>
+                <div className="p-6 pt-0 flex-shrink-0">
+                    <div className="flex justify-between items-center mb-4">
+                        <span className="text-xl font-bold text-gray-300">Total:</span>
+                        <span className="text-2xl font-bold text-green-400">S/ {total.toFixed(2)}</span>
+                    </div>
 
-                 <div className="flex justify-end gap-3 pt-4 mt-auto">
-                    <button type="button" onClick={onClose} className="py-2 px-4 text-sm font-medium text-gray-300 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors">Cancelar</button>
-                    <button type="submit" className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 transition-colors">Guardar Pedido</button>
+                     <div className="flex justify-end gap-3">
+                        <button type="button" onClick={onClose} className="py-2 px-4 text-sm font-medium text-gray-300 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors">Cancelar</button>
+                        <button type="submit" className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:ring-4 focus:outline-none focus:ring-purple-800 transition-colors">{existingOrder ? 'Guardar Cambios' : 'Guardar Pedido'}</button>
+                    </div>
                 </div>
             </form>
         </div>

@@ -1,15 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import type { User } from '../types';
-import { LogoutIcon } from './icons/LogoutIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
+import type { User } from '../types.ts';
+import { LogoutIcon } from './icons/LogoutIcon.tsx';
+import { UserCircleIcon } from './icons/UserCircleIcon.tsx';
 
 interface HeaderProps {
     user: User;
     onLogout: () => void;
+    allUsers: User[];
+    selectedUserId: string | null;
+    setSelectedUserId: (id: string | null) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ user, onLogout, allUsers, selectedUserId, setSelectedUserId }) => {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     useEffect(() => {
@@ -21,15 +24,17 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         });
     };
 
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString('es-ES');
+    };
+
+    const handleUserSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value;
+        setSelectedUserId(value === 'all' ? 'all' : value);
     };
 
     return (
@@ -42,6 +47,22 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                 </div>
             </div>
             <div className="flex items-center gap-6">
+                 {user.role === 'admin' && (
+                    <div>
+                        <label htmlFor="user-selector" className="text-xs text-gray-400 mr-2">Viendo a:</label>
+                        <select
+                            id="user-selector"
+                            value={selectedUserId || 'all'}
+                            onChange={handleUserSelection}
+                            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 p-1.5"
+                        >
+                            <option value="all">Todos</option>
+                            {allUsers.filter(u => u.role !== 'admin').map(u => (
+                                <option key={u._id} value={u._id}>{u.username}</option>
+                            ))}
+                        </select>
+                    </div>
+                 )}
                  <div className="text-right hidden sm:block">
                     <p className="font-semibold text-white">{formatTime(currentTime)}</p>
                     <p className="text-xs text-gray-400 capitalize">{formatDate(currentTime)}</p>

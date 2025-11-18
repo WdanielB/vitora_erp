@@ -151,8 +151,8 @@ createDataEndpoints('fixed-items', 'fixed_items');
 createDataEndpoints('stock', 'stock');
 createDataEndpoints('orders', 'orders');
 createDataEndpoints('clients', 'clients');
-createDataEndpoints('events', 'events');
-createDataEndpoints('fixed-expenses', 'fixed_expenses');
+// createDataEndpoints('events', 'events'); // Handled by new CRUD
+// createDataEndpoints('fixed-expenses', 'fixed_expenses'); // Handled by new CRUD
 
 // --- Custom Endpoints ---
 
@@ -172,10 +172,16 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/users/pins', async (req, res) => {
     const { userId, pins } = req.body;
-    if (!userId || !pins) {
-        return res.status(400).json({ error: 'userId y pins son requeridos.' });
+    const requesterId = req.headers['x-user-id'];
+    if (!userId || !pins || !requesterId) {
+        return res.status(400).json({ error: 'userId, pins y x-user-id son requeridos.' });
     }
     try {
+        const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
+        if (requester.role !== 'admin' && userId !== requesterId) {
+            return res.status(403).json({ error: 'Acceso denegado. Solo los administradores pueden cambiar los PINs de otros usuarios.' });
+        }
+
         await db.collection('users').updateOne(
             { _id: new ObjectId(userId) },
             { $set: { modulePins: pins } }
@@ -326,6 +332,73 @@ app.post('/api/orders', async (req, res) => {
     }
 });
 
+// Order Update
+app.put('/api/orders/:id', async (req, res) => {
+    const { id } = req.params;
+    const orderData = req.body;
+    delete orderData._id;
+
+    try {
+        await db.collection('orders').updateOne({ _id: new ObjectId(id) }, { $set: orderData });
+        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+        res.json(updatedOrder);
+    } catch (err) {
+        console.error('Error al actualizar el pedido:', err);
+        res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+});
+
+// Order Delete
+app.delete('/api/orders/:id', async (req, res) => {
+    const { id } = req.params;
+    const session = client.startSession();
+    try {
+        await session.withTransaction(async () => {
+            const ordersCollection = db.collection('orders');
+            const orderToDelete = await ordersCollection.findOne({ _id: new ObjectId(id) }, { session });
+
+            if (!orderToDelete) {
+                throw new Error('Pedido no encontrado');
+            }
+
+            // Restore stock
+            const stockCollection = db.collection('stock');
+            const movementsCollection = db.collection('stock_movements');
+            for (const item of orderToDelete.items) {
+                if (item.itemId) {
+                    const stockItem = await stockCollection.findOne({ itemId: item.itemId, userId: orderToDelete.userId }, { session });
+                    if (stockItem) {
+                        const quantityAfter = stockItem.quantity + item.quantity;
+                        await stockCollection.updateOne(
+                            { _id: stockItem._id },
+                            { $set: { quantity: quantityAfter } },
+                            { session }
+                        );
+                        await movementsCollection.insertOne({
+                            userId: orderToDelete.userId,
+                            itemId: item.itemId,
+                            itemName: stockItem.name,
+                            type: 'cancelacion',
+                            quantityChange: item.quantity,
+                            quantityAfter,
+                            relatedOrderId: id,
+                            createdAt: new Date().toISOString(),
+                        }, { session });
+                    }
+                }
+            }
+            await ordersCollection.deleteOne({ _id: new ObjectId(id) }, { session });
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error al eliminar el pedido:', err);
+        res.status(500).json({ error: 'Error interno del servidor.' });
+    } finally {
+        await session.endSession();
+    }
+});
+
+
 // Financial summary with admin view
 app.get('/api/finance/summary', async (req, res) => {
     const { userId, role, selectedUserId } = req.query;
@@ -346,7 +419,7 @@ app.get('/api/finance/summary', async (req, res) => {
         
         const ordersCollection = db.collection('orders');
         const orderSummary = await ordersCollection.aggregate([
-            { $match: matchQuery },
+            { $match: { ...matchQuery, status: { $ne: 'cancelado' } } },
             { $unwind: "$items" },
             {
                 $group: {
@@ -384,6 +457,55 @@ app.get('/api/finance/summary', async (req, res) => {
         console.error('Error al calcular el resumen financiero:', err);
         res.status(500).json({ error: 'Error interno del servidor.' });
     }
+});
+
+
+// --- Fixed Expenses CRUD ---
+app.post('/api/fixed-expenses', async (req, res) => {
+    const expenseData = req.body;
+    try {
+        const result = await db.collection('fixed_expenses').insertOne(expenseData);
+        res.status(201).json({ ...expenseData, _id: result.insertedId });
+    } catch (err) { res.status(500).json({ error: 'Error al crear gasto fijo' }); }
+});
+app.put('/api/fixed-expenses/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, amount } = req.body;
+    try {
+        await db.collection('fixed_expenses').updateOne({ _id: new ObjectId(id) }, { $set: { name, amount } });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Error al actualizar gasto fijo' }); }
+});
+app.delete('/api/fixed-expenses/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.collection('fixed_expenses').deleteOne({ _id: new ObjectId(id) });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Error al eliminar gasto fijo' }); }
+});
+
+// --- Events CRUD ---
+app.post('/api/events', async (req, res) => {
+    const eventData = req.body;
+    try {
+        const result = await db.collection('events').insertOne(eventData);
+        res.status(201).json({ ...eventData, _id: result.insertedId });
+    } catch (err) { res.status(500).json({ error: 'Error al crear evento' }); }
+});
+app.put('/api/events/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, date } = req.body;
+    try {
+        await db.collection('events').updateOne({ _id: new ObjectId(id) }, { $set: { name, date } });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Error al actualizar evento' }); }
+});
+app.delete('/api/events/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.collection('events').deleteOne({ _id: new ObjectId(id) });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Error al eliminar evento' }); }
 });
 
 

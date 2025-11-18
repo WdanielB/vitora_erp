@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
-import type { Order, OrderStatus, Item, Client, User } from '../../types';
-import { PlusIcon } from '../icons/PlusIcon';
-import OrderModal from '../OrderModal';
-import * as api from '../../services/api';
-
+import type { Order, OrderStatus, Item, Client, User } from '../../types.ts';
+import { PlusIcon } from '../icons/PlusIcon.tsx';
+import { PencilIcon } from '../icons/PencilIcon.tsx';
+import { TrashIcon } from '../icons/TrashIcon.tsx';
+import OrderModal from '../OrderModal.tsx';
+import * as api from '../../services/api.ts';
 
 interface OrdersPanelProps {
     orders: Order[];
@@ -16,20 +17,48 @@ interface OrdersPanelProps {
 
 const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, onDataNeedsRefresh, user }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     
-    const handleCreateOrder = async (orderData: Omit<Order, 'createdAt' | '_id'>) => {
+    const handleOpenModalForNew = () => {
+        setEditingOrder(null);
+        setIsModalOpen(true);
+    };
+
+    const handleOpenModalForEdit = (order: Order) => {
+        setEditingOrder(order);
+        setIsModalOpen(true);
+    };
+
+    const handleSaveOrder = async (orderData: Omit<Order, 'createdAt' | '_id'> | Order) => {
         try {
-            await api.createOrder(orderData);
+            if ('_id' in orderData) {
+                // Update
+                await api.updateOrder(orderData, user._id);
+            } else {
+                // Create
+                await api.createOrder(orderData, user._id);
+            }
             onDataNeedsRefresh();
         } catch(error) {
-            console.error("Failed to create order:", error);
-            // Add user feedback here
+            console.error("Failed to save order:", error);
         }
         setIsModalOpen(false);
+        setEditingOrder(null);
+    };
+
+    const handleDeleteOrder = async (orderId: string) => {
+        if (window.confirm("¿Estás seguro de que quieres eliminar este pedido? Esta acción no se puede deshacer y el stock de los productos será devuelto.")) {
+            try {
+                await api.deleteOrder(orderId, user._id);
+                onDataNeedsRefresh();
+            } catch (error) {
+                console.error("Failed to delete order:", error);
+            }
+        }
     };
     
     const getStatusChip = (status: OrderStatus) => {
-        const styles = {
+        const styles: Record<OrderStatus, string> = {
             pendiente: 'bg-yellow-400/80 text-yellow-900',
             'en armado': 'bg-blue-400/80 text-blue-900',
             entregado: 'bg-green-500/80 text-green-900',
@@ -44,7 +73,7 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, on
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Gestión de Pedidos</h1>
-                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-purple-600 hover:bg-purple-500 text-white">
+                <button onClick={handleOpenModalForNew} className="flex items-center gap-2 text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-purple-600 hover:bg-purple-500 text-white">
                     <PlusIcon className="w-4 h-4" /> Nuevo Pedido
                 </button>
             </div>
@@ -70,7 +99,14 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, on
                                 <td className="px-4 py-3 text-center">{getStatusChip(order.status)}</td>
                                 <td className="px-4 py-3 text-right font-bold text-white">S/ {order.total.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-center">
-                                    <button className="text-purple-400 hover:text-purple-300 font-semibold text-sm">Ver Detalles</button>
+                                   <div className="flex justify-center gap-2">
+                                        <button onClick={() => handleOpenModalForEdit(order)} className="flex items-center gap-1 text-purple-400 hover:text-purple-300 font-semibold text-sm">
+                                            <PencilIcon className="w-4 h-4"/> Ver/Editar
+                                        </button>
+                                         <button onClick={() => handleDeleteOrder(order._id!)} className="flex items-center gap-1 text-red-500 hover:text-red-400 font-semibold text-sm">
+                                            <TrashIcon className="w-4 h-4"/> Eliminar
+                                        </button>
+                                   </div>
                                 </td>
                             </tr>
                         ))}
@@ -86,11 +122,12 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, on
             <OrderModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                onSave={handleCreateOrder}
+                onSave={handleSaveOrder}
                 allItems={allItems}
                 clients={clients}
                 user={user}
                 onClientCreated={onDataNeedsRefresh}
+                existingOrder={editingOrder}
             />
         </div>
     );
