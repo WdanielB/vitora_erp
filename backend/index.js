@@ -151,8 +151,8 @@ createDataEndpoints('fixed-items', 'fixed_items');
 createDataEndpoints('stock', 'stock');
 createDataEndpoints('orders', 'orders');
 createDataEndpoints('clients', 'clients');
-// createDataEndpoints('events', 'events'); // Handled by new CRUD
-// createDataEndpoints('fixed-expenses', 'fixed_expenses'); // Handled by new CRUD
+createDataEndpoints('events', 'events');
+createDataEndpoints('fixed-expenses', 'fixed_expenses');
 
 // --- Custom Endpoints ---
 

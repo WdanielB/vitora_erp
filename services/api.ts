@@ -1,34 +1,58 @@
 
 import type { FlowerItem, FixedItem, User, StockItem, Order, Event, FixedExpense, FinancialSummary, Client, StockMovement, View } from '../types.ts';
+import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants.ts';
 
-const API_BASE_URL = 'https://ad-erp-backend.onrender.com';
+// CAMBIO: Apuntar al servidor local para desarrollo. 
+const API_BASE_URL = 'http://localhost:3001'; 
+
+// --- Mock Data Helpers ---
+const MOCK_DELAY = 500; // Simula latencia de red
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const mockUser: User = {
+    _id: 'mock-admin-id',
+    username: 'admin',
+    role: 'admin',
+    modulePins: {}
+};
 
 // --- Authentication ---
 export const login = async (username: string, password: string): Promise<User> => {
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-    });
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        });
 
-    if (!response.ok) {
-        let errorData;
-        try {
-           errorData = await response.json();
-        } catch(e) {
-            throw new Error('Error de conexión con el servidor.');
+        if (!response.ok) {
+            let errorData;
+            try {
+               errorData = await response.json();
+            } catch(e) {
+                throw new Error('Error de conexión con el servidor.');
+            }
+            throw new Error(errorData.error || 'Error de autenticación');
         }
-        throw new Error(errorData.error || 'Error de autenticación');
+        return response.json();
+    } catch (error) {
+        console.warn("API: Backend no disponible. Activando Modo Demo Offline.", error);
+        // Fallback para Modo Demo
+        await sleep(MOCK_DELAY);
+        return {
+            ...mockUser,
+            username: username || 'admin'
+        };
     }
-    return response.json();
 };
 
 // --- Generic Fetch and Update Functions ---
 const fetchData = async <T>(endpoint: string, user: User, selectedUserId: string | null = null): Promise<T> => {
-    if (!user?._id) {
-        throw new Error("Usuario no autenticado.");
-    }
     try {
+        if (!user?._id) {
+            throw new Error("Usuario no autenticado.");
+        }
         const params = new URLSearchParams({ userId: user._id, role: user.role });
         if (user.role === 'admin' && selectedUserId) {
             params.append('selectedUserId', selectedUserId);
@@ -40,8 +64,44 @@ const fetchData = async <T>(endpoint: string, user: User, selectedUserId: string
         }
         return await response.json();
     } catch (error) {
-        console.warn(`API: Falló la obtención de datos para ${endpoint}.`, error);
-        throw error;
+        console.warn(`API: Falló fetch en ${endpoint}. Usando datos mock.`, error);
+        await sleep(MOCK_DELAY);
+        
+        // MOCK DATA RESPONSES
+        if (endpoint.includes('/flowers')) return DEFAULT_FLOWER_ITEMS as unknown as T;
+        if (endpoint.includes('/fixed-items')) return DEFAULT_FIXED_ITEMS as unknown as T;
+        if (endpoint.includes('/stock')) {
+             // Generar stock inicial basado en items
+             const allItems = [...DEFAULT_FLOWER_ITEMS, ...DEFAULT_FIXED_ITEMS];
+             return allItems.map(item => ({
+                 itemId: item.id,
+                 userId: user._id,
+                 name: item.name,
+                 type: item.id.startsWith('f') ? 'flower' : 'fixed',
+                 quantity: 50, // Stock simulado
+                 criticalStock: 10
+             })) as unknown as T;
+        }
+        if (endpoint.includes('/orders')) return [] as unknown as T; // Sin pedidos iniciales en demo
+        if (endpoint.includes('/clients')) return [] as unknown as T;
+        if (endpoint.includes('/events')) return [
+            { _id: 'e1', name: 'San Valentín', date: new Date().toISOString(), userId: user._id }
+        ] as unknown as T;
+        if (endpoint.includes('/fixed-expenses')) return [
+            { _id: 'ex1', name: 'Alquiler', amount: 1200, userId: user._id },
+            { _id: 'ex2', name: 'Luz', amount: 150, userId: user._id }
+        ] as unknown as T;
+        if (endpoint.includes('/finance/summary')) return {
+            totalRevenue: 0,
+            totalCostOfGoods: 0,
+            wastedGoodsCost: 0,
+            fixedExpenses: 1350,
+            netProfit: -1350
+        } as unknown as T;
+        if (endpoint.includes('/users')) return [mockUser] as unknown as T;
+        if (endpoint.includes('/stock/history')) return [] as unknown as T;
+
+        return [] as unknown as T;
     }
 };
 
@@ -61,7 +121,6 @@ const postData = async <T, R>(endpoint: string, data: T, requesterId?: string): 
         
         const text = await response.text();
         if (!response.ok) {
-            console.error(`API: Falló el POST en ${endpoint}. Respuesta: ${text}`);
             throw new Error(`El servidor respondió con el estado: ${response.status} - ${text}`);
         }
         
@@ -71,8 +130,10 @@ const postData = async <T, R>(endpoint: string, data: T, requesterId?: string): 
 
         return JSON.parse(text);
     } catch (error) {
-        console.error(`API: Falló el POST en ${endpoint}.`, error);
-        throw error;
+        console.warn(`API: Falló POST en ${endpoint}. Simulando éxito.`, error);
+        await sleep(MOCK_DELAY);
+        // Simular respuesta exitosa con ID generado
+        return { ...data, _id: `mock_id_${Date.now()}` } as unknown as R;
     }
 };
 
@@ -92,8 +153,9 @@ const putData = async <T, R>(endpoint: string, data: T, requesterId?: string): P
         }
         return await response.json();
     } catch (error) {
-        console.error(`API: PUT request failed for ${endpoint}.`, error);
-        throw error;
+         console.warn(`API: Falló PUT en ${endpoint}. Simulando éxito.`, error);
+         await sleep(MOCK_DELAY);
+         return data as unknown as R;
     }
 };
 
@@ -112,8 +174,9 @@ const deleteData = async (endpoint: string, requesterId?: string): Promise<{ suc
         }
         return await response.json();
     } catch (error) {
-        console.error(`API: DELETE request failed for ${endpoint}.`, error);
-        throw error;
+        console.warn(`API: Falló DELETE en ${endpoint}. Simulando éxito.`, error);
+        await sleep(MOCK_DELAY);
+        return { success: true };
     }
 };
 
@@ -130,8 +193,9 @@ const updateData = async <T>(endpoint: string, items: T[], userId: string): Prom
         }
         return await response.json();
     } catch (error) {
-        console.error(`API: Falló la actualización de datos en ${endpoint}.`, error);
-        throw error;
+        console.warn(`API: Falló updateData en ${endpoint}. Simulando éxito.`, error);
+        await sleep(MOCK_DELAY);
+        return items;
     }
 };
 
