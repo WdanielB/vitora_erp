@@ -335,23 +335,15 @@ app.delete('/api/users/:id', async (req, res) => {
              return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta.' });
         }
 
-        // Obtener usuario a eliminar para verificar si es ADMIN
-        const userToDelete = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        // ELIMINADO: Restricción de "último administrador".
+        // Ahora se permite borrar cualquier usuario (incluidos otros admins),
+        // excepto el usuario que está logueado actualmente (validado arriba).
         
-        if (!userToDelete) {
-            return res.status(404).json({ error: 'Usuario no encontrado.' });
-        }
+        const result = await db.collection('users').deleteOne({ _id: new ObjectId(id) });
 
-        // REGLA MEJORADA: Si se intenta borrar un admin, verificar que no sea el último.
-        // Ya no importa el nombre ("ADMIN"), solo el rol.
-        if (userToDelete.role === 'admin') {
-            const adminCount = await db.collection('users').countDocuments({ role: 'admin' });
-            if (adminCount <= 1) {
-                return res.status(403).json({ error: 'No se puede eliminar al último administrador del sistema.' });
-            }
+        if (result.deletedCount === 0) {
+             return res.status(404).json({ error: 'Usuario no encontrado para eliminar.' });
         }
-
-        await db.collection('users').deleteOne({ _id: new ObjectId(id) });
         
         res.json({ success: true });
     } catch (err) {
