@@ -97,6 +97,7 @@ export interface Order {
     total: number;
     items: OrderItem[];
     floristNote?: string;
+    dedication?: string; // New field
     createdAt: string;
 }
 

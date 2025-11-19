@@ -296,7 +296,7 @@ app.post('/api/stock/update-batch', async (req, res) => {
                 const quantityAfter = stockItem.quantity + quantityChange;
 
                 // Weighted Average Cost Logic
-                if (movementType === 'compra' && newCost && newCost > 0) {
+                if (movementType === 'compra' && newCost !== undefined && newCost !== null && newCost >= 0) {
                     const catalogItem = await collectionToUpdate.findOne({ id: itemId, userId }, { session });
                     if (catalogItem) {
                         let currentTotalValue = 0;
@@ -306,25 +306,33 @@ app.post('/api/stock/update-batch', async (req, res) => {
                         let newCostForRecord = 0;
 
                         if (stockItem.type === 'flower') {
+                             // Flower calculation
                              const currentUnitCost = (catalogItem.costoPaquete || 0) / (catalogItem.cantidadPorPaquete || 1);
                              currentTotalValue = stockItem.quantity * currentUnitCost;
+                             
                              if (isPackage) {
                                  newTotalValue = change * newCost;
                                  newTotalQty = stockItem.quantity + (change * (catalogItem.cantidadPorPaquete || 1));
                              } else {
-                                 newTotalValue = change * (newCost / (catalogItem.cantidadPorPaquete || 1));
+                                 // User entered cost for stems? Assuming newCost is total cost for the batch of stems or unit cost?
+                                 // Assuming newCost is unit cost if not package
+                                 newTotalValue = change * newCost; 
                                  newTotalQty = stockItem.quantity + change;
                              }
+
                              if (newTotalQty > 0) {
                                  newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
                                  const newPackageCost = newUnitCost * (catalogItem.cantidadPorPaquete || 1);
+                                 
                                  await collectionToUpdate.updateOne({ _id: catalogItem._id }, { $set: { costoPaquete: parseFloat(newPackageCost.toFixed(2)) } }, { session });
-                                 newCostForRecord = newPackageCost;
+                                 newCostForRecord = newPackageCost; // Record package cost for flowers
                              }
                         } else {
+                            // Product calculation
                             currentTotalValue = stockItem.quantity * (catalogItem.costo || 0);
-                            newTotalValue = change * newCost;
+                            newTotalValue = change * newCost; // newCost is unit cost for products
                             newTotalQty = stockItem.quantity + change;
+                            
                             if (newTotalQty > 0) {
                                 newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
                                 await collectionToUpdate.updateOne({ _id: catalogItem._id }, { $set: { costo: parseFloat(newUnitCost.toFixed(2)) } }, { session });
@@ -332,7 +340,7 @@ app.post('/api/stock/update-batch', async (req, res) => {
                             }
                         }
                         
-                        // Record Price History (new collection)
+                        // Record Price History (Always record on purchase with new cost)
                         if (newTotalQty > 0) {
                             await db.collection('record_price').insertOne({
                                 userId,
@@ -354,7 +362,7 @@ app.post('/api/stock/update-batch', async (req, res) => {
             }
         });
         res.status(200).json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Error interno.' }); } finally { await session.endSession(); }
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno.' }); } finally { await session.endSession(); }
 });
 
 app.get('/api/stock/history/:itemId', async (req, res) => {
