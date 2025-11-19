@@ -8,32 +8,42 @@ interface CostChartProps {
 }
 
 const CostChart: React.FC<CostChartProps> = ({ data, itemType }) => {
-  if (!data || data.length < 2) {
+  if (!data || !Array.isArray(data) || data.length < 2) {
     return <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg text-gray-500">No hay suficientes datos para mostrar un gráfico.</div>;
   }
 
-  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
   const getValue = (entry: CostHistoryEntry) => itemType === 'flower' ? entry.costoPaquete : entry.costo;
 
-  const validData = sortedData.filter(d => getValue(d) !== undefined && getValue(d) !== null);
+  // Filter and Sort
+  const validData = [...data]
+    .filter(d => {
+        const val = getValue(d);
+        return val !== undefined && val !== null && !isNaN(val);
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (validData.length < 2) {
-    return <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg text-gray-500">No hay suficientes datos de costos para mostrar un gráfico.</div>;
+    return <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg text-gray-500">No hay suficientes datos válidos para mostrar un gráfico.</div>;
   }
   
   const width = 500;
   const height = 200;
   const padding = 40;
 
-  const yMax = Math.max(...validData.map(d => getValue(d)!));
-  const yMin = Math.min(...validData.map(d => getValue(d)!));
+  let yMax = Math.max(...validData.map(d => getValue(d)!));
+  let yMin = Math.min(...validData.map(d => getValue(d)!));
+  
+  // Safety check for Infinity
+  if (!isFinite(yMax) || !isFinite(yMin)) {
+      return <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg text-gray-500">Error en datos del gráfico.</div>;
+  }
+
   const xMin = new Date(validData[0].date).getTime();
   const xMax = new Date(validData[validData.length - 1].date).getTime();
 
   const xScale = (date: string) => {
     const time = new Date(date).getTime();
-    if (xMax === xMin) return padding + (width - 2 * padding) / 2;
+    if (xMax === xMin || isNaN(time)) return padding + (width - 2 * padding) / 2;
     return padding + ((time - xMin) / (xMax - xMin)) * (width - 2 * padding);
   };
   
@@ -44,16 +54,19 @@ const CostChart: React.FC<CostChartProps> = ({ data, itemType }) => {
 
   const pathData = validData.reduce((path, d, i) => {
     const x = xScale(d.date);
-    const y = yScale(getValue(d)!);
+    const val = getValue(d)!;
+    const y = yScale(val);
 
     if (i === 0) {
       return `M ${x},${y}`;
     }
     
-    // Get previous point's y-coordinate to create a stepped line
-    const prevY = yScale(getValue(validData[i - 1])!);
+    const prevVal = getValue(validData[i - 1])!;
+    const prevY = yScale(prevVal);
     
-    // Draw horizontal line to new x, then vertical line to new y
+    // Check for NaNs in coordinates before constructing path
+    if (isNaN(x) || isNaN(y) || isNaN(prevY)) return path;
+
     return `${path} L ${x},${prevY} L ${x},${y}`;
   }, '');
 
@@ -66,7 +79,10 @@ const CostChart: React.FC<CostChartProps> = ({ data, itemType }) => {
         const range = yMax - yMin;
         for (let i = 0; i < numLabels; i++) {
             const value = yMin + (range / (numLabels - 1)) * i;
-            labels.push({ y: yScale(value), label: `S/ ${value.toFixed(2)}` });
+            const yPos = yScale(value);
+            if (!isNaN(yPos)) {
+                 labels.push({ y: yPos, label: `S/ ${value.toFixed(2)}` });
+            }
         }
     }
     return labels;
@@ -78,13 +94,15 @@ const CostChart: React.FC<CostChartProps> = ({ data, itemType }) => {
       if (numLabels <= 1) {
           if (validData.length > 0) {
               const d = validData[0];
-              labels.push({ x: xScale(d.date), label: new Date(d.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) });
+              const xPos = xScale(d.date);
+              if(!isNaN(xPos)) labels.push({ x: xPos, label: new Date(d.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) });
           }
       } else {
         for (let i = 0; i < numLabels; i++) {
             const index = Math.floor(i * (validData.length - 1) / (numLabels - 1));
             const d = validData[index];
-            labels.push({ x: xScale(d.date), label: new Date(d.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) });
+            const xPos = xScale(d.date);
+            if(!isNaN(xPos)) labels.push({ x: xPos, label: new Date(d.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) });
         }
       }
       return labels;
@@ -116,10 +134,15 @@ const CostChart: React.FC<CostChartProps> = ({ data, itemType }) => {
         {/* Data Points */}
         {validData.map((d, i) => {
           const value = getValue(d)!;
+          const cx = xScale(d.date);
+          const cy = yScale(value);
+          
+          if(isNaN(cx) || isNaN(cy)) return null;
+
           return (
             <g key={i} className="group">
-              <circle cx={xScale(d.date)} cy={yScale(value)} r="8" fill="transparent" />
-              <circle cx={xScale(d.date)} cy={yScale(value)} r="3" fill="#A78BFA" className="group-hover:r-4 transition-all" />
+              <circle cx={cx} cy={cy} r="8" fill="transparent" />
+              <circle cx={cx} cy={cy} r="3" fill="#A78BFA" className="group-hover:r-4 transition-all" />
               <title>{`Fecha: ${new Date(d.date).toLocaleString('es-ES')}\nCosto: S/ ${value.toFixed(2)}`}</title>
             </g>
           )

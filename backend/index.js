@@ -60,6 +60,28 @@ const seedInitialDataForUser = async (userId) => {
     console.log(`Datos iniciales sembrados para el usuario ${userId}`);
 };
 
+const ensureAdminExists = async () => {
+    try {
+        const usersCollection = db.collection('users');
+        const adminUser = await usersCollection.findOne({ username: 'ADMIN' });
+        
+        if (!adminUser) {
+            console.log("Creando Super Usuario ADMIN...");
+            const hashedPassword = await bcrypt.hash('admin123', saltRounds); // Default pass
+            await usersCollection.insertOne({
+                username: 'ADMIN',
+                password: hashedPassword,
+                role: 'admin',
+                modulePins: { finance: '1234', settings: '1234' },
+                createdAt: new Date()
+            });
+             console.log("Usuario ADMIN creado (Pass: admin123).");
+        }
+    } catch (error) {
+        console.error("Error asegurando usuario ADMIN:", error);
+    }
+};
+
 
 // --- API Endpoints ---
 app.get('/', (req, res) => {
@@ -74,6 +96,7 @@ app.post('/api/login', async (req, res) => {
     }
     try {
         const usersCollection = db.collection('users');
+        // Case insensitive login
         const user = await usersCollection.findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } });
         if (!user) {
             return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
@@ -81,10 +104,15 @@ app.post('/api/login', async (req, res) => {
         const match = await bcrypt.compare(password, user.password);
         if (match) {
             const userIdString = user._id.toString();
-            const flowerCount = await db.collection('flowers').countDocuments({ userId: userIdString });
-            if (flowerCount === 0) {
-                await seedInitialDataForUser(userIdString);
+            
+            // Seed data for regular users if first time
+            if (user.username !== 'ADMIN') {
+                 const flowerCount = await db.collection('flowers').countDocuments({ userId: userIdString });
+                 if (flowerCount === 0) {
+                     await seedInitialDataForUser(userIdString);
+                 }
             }
+            
             const { password, ...userWithoutPassword } = user;
             res.json({ ...userWithoutPassword, _id: userIdString });
         } else {
@@ -109,7 +137,15 @@ const createDataEndpoints = (endpointName, collectionName) => {
                 if (selectedUserId && selectedUserId !== 'all') {
                     query = { userId: selectedUserId };
                 } else {
-                    query = {}; // Admin seeing all users
+                    // If looking at all, user needs to own data or be admin. 
+                    // For simpler logic in this MVP, Admin sees specific user data or their own.
+                    // Ideally 'all' would aggregate, but for item lists it's messy.
+                    // Default to admin's own data if 'all' is selected for catalogs.
+                    if (endpointName === 'orders' || endpointName === 'stock/history') {
+                         query = {}; // See everything for orders/history
+                    } else {
+                         query = { userId }; // Fallback for catalogs
+                    }
                 }
             }
             const items = await db.collection(collectionName).find(query).toArray();
@@ -210,7 +246,7 @@ app.post('/api/clients', async (req, res) => {
     }
 });
 
-// Stock management with history
+// Stock management with WEIGHTED AVERAGE COST
 app.post('/api/stock/update-batch', async (req, res) => {
     const { updates } = req.body;
     if (!Array.isArray(updates) || updates.length === 0) {
@@ -222,15 +258,95 @@ app.post('/api/stock/update-batch', async (req, res) => {
         await session.withTransaction(async () => {
             const stockCollection = db.collection('stock');
             const movementsCollection = db.collection('stock_movements');
+            const flowersCollection = db.collection('flowers');
+            const fixedItemsCollection = db.collection('fixed_items');
 
             for (const update of updates) {
-                const { itemId, change, userId, movementType } = update;
+                const { itemId, change, userId, movementType, newCost, isPackage } = update;
                 if (!userId) throw new Error(`userId no proporcionado para la actualización del item ${itemId}`);
                 
                 const stockItem = await stockCollection.findOne({ itemId, userId }, { session });
                 if (!stockItem) throw new Error(`Stock item ${itemId} no encontrado para el usuario ${userId}`);
 
-                const quantityAfter = stockItem.quantity + change;
+                // Logic for Unit Conversion (Package -> Stems)
+                let quantityChange = change;
+                if (isPackage && stockItem.type === 'flower') {
+                    // Fetch catalog item to get conversion rate
+                    const catalogItem = await flowersCollection.findOne({ id: itemId, userId }, { session });
+                    if (catalogItem && catalogItem.cantidadPorPaquete) {
+                        quantityChange = change * catalogItem.cantidadPorPaquete;
+                    }
+                }
+
+                const quantityAfter = stockItem.quantity + quantityChange;
+
+                // Logic for Weighted Average Cost (Costo Promedio Ponderado)
+                if (movementType === 'compra' && newCost && newCost > 0) {
+                    const collectionToUpdate = stockItem.type === 'flower' ? flowersCollection : fixedItemsCollection;
+                    const catalogItem = await collectionToUpdate.findOne({ id: itemId, userId }, { session });
+                    
+                    if (catalogItem) {
+                        // Calculate new weighted cost
+                        // For flowers, cost is usually per package, but stock is stems. 
+                        // Let's assume newCost coming in is per Package if isPackage is true.
+                        
+                        let currentTotalValue = 0;
+                        let newTotalValue = 0;
+                        let newTotalQty = 0;
+
+                        if (stockItem.type === 'flower') {
+                             // Current value (Stems * Unit Cost)
+                             // Unit Cost = costoPaquete / cantidadPorPaquete (ignoring merma for stock value valuation)
+                             const currentUnitCost = (catalogItem.costoPaquete || 0) / (catalogItem.cantidadPorPaquete || 1);
+                             currentTotalValue = stockItem.quantity * currentUnitCost;
+                             
+                             // New Value
+                             // If input was packages:
+                             if (isPackage) {
+                                 newTotalValue = change * newCost; // change is num packages * cost per package
+                                 newTotalQty = stockItem.quantity + (change * (catalogItem.cantidadPorPaquete || 1));
+                             } else {
+                                 // If input was units (rare for purchase but possible)
+                                 newTotalValue = change * (newCost / (catalogItem.cantidadPorPaquete || 1));
+                                 newTotalQty = stockItem.quantity + change;
+                             }
+
+                             // New Unit Cost
+                             if (newTotalQty > 0) {
+                                 const newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
+                                 // Convert back to Package Cost for the catalog storage
+                                 const newPackageCost = newUnitCost * (catalogItem.cantidadPorPaquete || 1);
+                                 
+                                 await collectionToUpdate.updateOne(
+                                     { _id: catalogItem._id },
+                                     { 
+                                         $set: { costoPaquete: parseFloat(newPackageCost.toFixed(2)) },
+                                         $push: { costHistory: { date: new Date().toISOString(), costoPaquete: parseFloat(newPackageCost.toFixed(2)) } }
+                                     },
+                                     { session }
+                                 );
+                             }
+
+                        } else {
+                            // Fixed Item
+                            currentTotalValue = stockItem.quantity * (catalogItem.costo || 0);
+                            newTotalValue = change * newCost;
+                            newTotalQty = stockItem.quantity + change;
+
+                            if (newTotalQty > 0) {
+                                const newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
+                                await collectionToUpdate.updateOne(
+                                     { _id: catalogItem._id },
+                                     { 
+                                         $set: { costo: parseFloat(newUnitCost.toFixed(2)) },
+                                         $push: { costHistory: { date: new Date().toISOString(), costo: parseFloat(newUnitCost.toFixed(2)) } }
+                                     },
+                                     { session }
+                                 );
+                            }
+                        }
+                    }
+                }
 
                 await stockCollection.updateOne(
                     { _id: stockItem._id },
@@ -243,14 +359,15 @@ app.post('/api/stock/update-batch', async (req, res) => {
                     itemId,
                     itemName: stockItem.name,
                     type: movementType,
-                    quantityChange: change,
+                    quantityChange,
                     quantityAfter,
                     createdAt: new Date().toISOString(),
+                    note: isPackage ? `Ingreso de ${change} paquetes` : undefined
                 };
                 await movementsCollection.insertOne(movement, { session });
             }
         });
-        res.status(200).json({ success: true }); // Return a valid JSON response
+        res.status(200).json({ success: true });
     } catch (err) {
         console.error('Error en la actualización de stock por lote:', err);
         res.status(500).json({ error: 'Error interno del servidor.' });
@@ -516,10 +633,12 @@ const startServer = async () => {
   try {
     await client.connect();
     console.log("Conectado exitosamente a MongoDB.");
-    const dbName = process.env.MONGO_DB_NAME || "vitoraDB"; 
+    const dbName = process.env.MONGO_DB_NAME || "Ad_db"; 
     db = client.db(dbName);
     console.log(`Usando la base de datos: ${dbName}`);
     
+    await ensureAdminExists();
+
     app.listen(PORT, () => {
       console.log(`Servidor escuchando en el puerto ${PORT}`);
     });

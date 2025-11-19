@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import type { FinancialSummary, Order, StockItem } from '../../types.ts';
+import type { FinancialSummary, Order, StockItem, User } from '../../types.ts';
 import { BanknotesIcon } from '../icons/BanknotesIcon.tsx';
 import { ChartBarIcon } from '../icons/ChartBarIcon.tsx';
 import { ClipboardListIcon } from '../icons/ClipboardListIcon.tsx';
@@ -12,6 +12,7 @@ interface DashboardPanelProps {
     orders: Order[];
     financialSummary: FinancialSummary | null;
     stockItems: StockItem[];
+    user?: User;
 }
 
 const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, color: string }> = ({ title, value, icon, color }) => (
@@ -26,7 +27,7 @@ const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, 
     </div>
 );
 
-const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummary, stockItems }) => {
+const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummary, stockItems, user }) => {
 
     const topProducts = useMemo(() => {
         const productCount: { [key: string]: { quantity: number; revenue: number } } = {};
@@ -66,15 +67,37 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummar
             .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
     }, [orders]);
     
+    const isAdmin = user?.role === 'admin';
+
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-300 tracking-wider">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-gray-300 tracking-wider">
+                {isAdmin ? 'Dashboard Administrativo' : 'Panel Operativo'}
+            </h1>
+            
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                <StatCard title="Ventas del Mes" value={`S/ ${financialSummary?.totalRevenue.toFixed(2) || '0.00'}`} icon={<BanknotesIcon className="w-6 h-6 text-white"/>} color="bg-green-500/80" />
-                <StatCard title="Ganancia Neta" value={`S/ ${financialSummary?.netProfit.toFixed(2) || '0.00'}`} icon={<ChartBarIcon className="w-6 h-6 text-white"/>} color="bg-cyan-500/80" />
-                <StatCard title="Pedidos Activos" value={orders.filter(o => o.status === 'pendiente' || o.status === 'en armado').length.toString()} icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} color="bg-purple-500/80" />
+                {/* VISTA ADMIN: Enfasis Financiero */}
+                {isAdmin && (
+                    <>
+                        <StatCard title="Ventas Totales" value={`S/ ${financialSummary?.totalRevenue.toFixed(2) || '0.00'}`} icon={<BanknotesIcon className="w-6 h-6 text-white"/>} color="bg-green-600/80" />
+                        <StatCard title="Ganancia Neta" value={`S/ ${financialSummary?.netProfit.toFixed(2) || '0.00'}`} icon={<ChartBarIcon className="w-6 h-6 text-white"/>} color="bg-cyan-600/80" />
+                        <StatCard title="Gastos Fijos" value={`S/ ${financialSummary?.fixedExpenses.toFixed(2) || '0.00'}`} icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} color="bg-red-500/80" />
+                    </>
+                )}
+                
+                {/* VISTA USUARIO/COMUN: Enfasis Operativo */}
+                {!isAdmin && (
+                     <>
+                        <StatCard title="Pedidos Activos" value={orders.filter(o => o.status === 'pendiente' || o.status === 'en armado').length.toString()} icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} color="bg-blue-500/80" />
+                        <StatCard title="Entregas Hoy" value={upcomingDeliveries.filter(o => new Date(o.deliveryDate).toDateString() === new Date().toDateString()).length.toString()} icon={<TruckIcon className="w-6 h-6 text-white"/>} color="bg-purple-500/80" />
+                     </>
+                )}
+
+                {/* COMUN */}
                 <StatCard title="Stock Crítico" value={criticalStockItems.length.toString()} icon={<BellAlertIcon className="w-6 h-6 text-white"/>} color="bg-yellow-500/80" />
+                {!isAdmin && <StatCard title="Ventas Mes" value={`S/ ${financialSummary?.totalRevenue.toFixed(2) || '0.00'}`} icon={<BanknotesIcon className="w-6 h-6 text-white"/>} color="bg-green-500/80" />}
             </div>
+
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                  <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
@@ -97,7 +120,7 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummar
                         </ul>
                     </div>
                      <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
-                        <h3 className="font-bold text-lg text-amber-300 mb-4 flex items-center gap-2"><BellAlertIcon className="w-5 h-5"/> Stock Crítico</h3>
+                        <h3 className="font-bold text-lg text-amber-300 mb-4 flex items-center gap-2"><BellAlertIcon className="w-5 h-5"/> Alerta de Stock</h3>
                         <ul className="space-y-2 max-h-48 overflow-y-auto">
                             {criticalStockItems.map(item => (
                                 <li key={item.itemId} className="flex justify-between items-center text-sm p-2 bg-gray-700/50 rounded-md">
@@ -112,7 +135,7 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ orders, financialSummar
                     </div>
                 </div>
                 <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
-                    <h3 className="font-bold text-lg text-amber-300 mb-4">Productos Más Vendidos</h3>
+                    <h3 className="font-bold text-lg text-amber-300 mb-4">Productos Top</h3>
                     <ul className="space-y-3">
                         {topProducts.map(product => (
                             <li key={product.name} className="flex justify-between items-center text-sm">

@@ -23,6 +23,37 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders, user, onD
     const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+    // --- HOOKS MOVED TO TOP LEVEL (Fixes React Error #310/White Screen) ---
+    
+    // 1. Data for Month View
+    const calendarDays = useMemo(() => {
+        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const days = [];
+        const startDate = new Date(firstDayOfMonth);
+        startDate.setDate(startDate.getDate() - startDate.getDay());
+        for (let i = 0; i < 42; i++) {
+            days.push(new Date(startDate));
+            startDate.setDate(startDate.getDate() + 1);
+        }
+        return days;
+    }, [currentDate]);
+
+    // 2. Data for Year View
+    const yearViewData = useMemo(() => {
+        return {
+            eventDates: events.map(e => new Date(e.date).toDateString()),
+            orderDates: orders.map(o => new Date(o.deliveryDate).toDateString())
+        };
+    }, [events, orders]);
+
+    // 3. Data for List View
+    const combinedList = useMemo(() => {
+        const eventItems = events.map(e => ({ ...e, type: 'event' as const, date: new Date(e.date) }));
+        const orderItems = orders.map(o => ({ ...o, type: 'order' as const, date: new Date(o.deliveryDate) }));
+        return [...eventItems, ...orderItems].sort((a, b) => a.date.getTime() - b.date.getTime());
+    }, [events, orders]);
+
+
     const handleEventSave = async (eventData: Omit<Event, '_id'> | Event) => {
         try {
             if ('_id' in eventData) await api.updateEvent(eventData, user._id);
@@ -54,18 +85,6 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders, user, onD
     );
 
     const renderMonthView = () => {
-        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const calendarDays = useMemo(() => {
-            const days = [];
-            const startDate = new Date(firstDayOfMonth);
-            startDate.setDate(startDate.getDate() - startDate.getDay());
-            for (let i = 0; i < 42; i++) {
-                days.push(new Date(startDate));
-                startDate.setDate(startDate.getDate() + 1);
-            }
-            return days;
-        }, [currentDate]);
-
         return (
             <>
                 <div className="grid grid-cols-7 text-center font-bold text-gray-400 text-xs uppercase pb-2 border-b border-gray-700 flex-shrink-0">
@@ -93,8 +112,6 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders, user, onD
     const renderYearView = () => {
         const year = currentDate.getFullYear();
         const months = Array.from({ length: 12 }, (_, i) => new Date(year, i, 1));
-        const monthEvents = useMemo(() => events.map(e => new Date(e.date).toDateString()), [events]);
-        const monthOrders = useMemo(() => orders.map(o => new Date(o.deliveryDate).toDateString()), [orders]);
 
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-grow overflow-y-auto pr-2 mt-4">
@@ -111,8 +128,8 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders, user, onD
                                 {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`}></div>)}
                                 {monthDays.map(day => {
                                     const dayDate = new Date(year, month.getMonth(), day).toDateString();
-                                    const hasEvent = monthEvents.includes(dayDate);
-                                    const hasOrder = monthOrders.includes(dayDate);
+                                    const hasEvent = yearViewData.eventDates.includes(dayDate);
+                                    const hasOrder = yearViewData.orderDates.includes(dayDate);
                                     let dotClass = '';
                                     if (hasOrder) dotClass = 'bg-blue-500';
                                     else if (hasEvent) dotClass = 'bg-amber-500';
@@ -129,11 +146,6 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ events, orders, user, onD
     };
 
     const renderListView = () => {
-        const combinedList = useMemo(() => {
-            const eventItems = events.map(e => ({ ...e, type: 'event' as const, date: new Date(e.date) }));
-            const orderItems = orders.map(o => ({ ...o, type: 'order' as const, date: new Date(o.deliveryDate) }));
-            return [...eventItems, ...orderItems].sort((a, b) => a.date.getTime() - b.date.getTime());
-        }, [events, orders]);
         return (
             <div className="flex-grow overflow-y-auto mt-4 pr-2">
                 <ul className="space-y-3">

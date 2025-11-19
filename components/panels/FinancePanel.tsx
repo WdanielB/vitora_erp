@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { FinancialSummary, FixedExpense, Order, Item, User, FlowerItem, FixedItem } from '../../types.ts';
 import * as api from '../../services/api.ts';
 import FixedExpenseModal from '../FixedExpenseModal.tsx';
@@ -38,14 +38,43 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
 
     // State for History
     const allItemsForHistory = useMemo(() => [
-        ...flowerItems.map(item => ({ ...item, type: 'flower' as const })),
-        ...fixedItems.map(item => ({ ...item, type: 'fixed' as const }))
+        ...(flowerItems || []).map(item => ({ ...item, type: 'flower' as const })),
+        ...(fixedItems || []).map(item => ({ ...item, type: 'fixed' as const }))
     ], [flowerItems, fixedItems]);
-    const [selectedHistoryItemId, setSelectedHistoryItemId] = useState<string | null>(allItemsForHistory.length > 0 ? allItemsForHistory[0].id : null);
+    
+    const [selectedHistoryItemId, setSelectedHistoryItemId] = useState<string | null>(null);
+    
+    // Set default selected item when list loads
+    useEffect(() => {
+        if (!selectedHistoryItemId && allItemsForHistory.length > 0) {
+            setSelectedHistoryItemId(allItemsForHistory[0].id);
+        }
+    }, [allItemsForHistory, selectedHistoryItemId]);
+
     const selectedHistoryItem = useMemo(() => {
         if (!selectedHistoryItemId) return null;
         return allItemsForHistory.find(item => item.id === selectedHistoryItemId) || null;
     }, [allItemsForHistory, selectedHistoryItemId]);
+
+    // --- MOVED TO TOP LEVEL TO PREVENT HOOK ERRORS ---
+    const productProfitability = useMemo(() => {
+        const productSales: { [key: string]: { totalRevenue: number, totalCost: number } } = {};
+        
+        if (orders && Array.isArray(orders)) {
+            orders.forEach(order => {
+                if (order.status === 'cancelado') return;
+                if (order.items && Array.isArray(order.items)) {
+                    order.items.forEach(item => {
+                        if (!productSales[item.name]) productSales[item.name] = { totalRevenue: 0, totalCost: 0 };
+                        productSales[item.name].totalRevenue += item.price * item.quantity;
+                        productSales[item.name].totalCost += item.unitCost * item.quantity;
+                    });
+                }
+            });
+        }
+        
+        return Object.entries(productSales).map(([name, data]) => ({ name, margin: data.totalRevenue > 0 ? ((data.totalRevenue - data.totalCost) / data.totalRevenue) * 100 : 0, totalRevenue: data.totalRevenue })).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5);
+    }, [orders]);
 
 
     const handleOpenExpenseModalForNew = () => { setEditingExpense(null); setIsExpenseModalOpen(true); };
@@ -101,19 +130,6 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
     );
 
     const renderSummary = () => {
-        const productProfitability = useMemo(() => {
-            const productSales: { [key: string]: { totalRevenue: number, totalCost: number } } = {};
-            orders.forEach(order => {
-                 if (order.status === 'cancelado') return;
-                order.items.forEach(item => {
-                    if (!productSales[item.name]) productSales[item.name] = { totalRevenue: 0, totalCost: 0 };
-                    productSales[item.name].totalRevenue += item.price * item.quantity;
-                    productSales[item.name].totalCost += item.unitCost * item.quantity;
-                });
-            });
-            return Object.entries(productSales).map(([name, data]) => ({ name, margin: data.totalRevenue > 0 ? ((data.totalRevenue - data.totalCost) / data.totalRevenue) * 100 : 0, totalRevenue: data.totalRevenue })).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5);
-        }, [orders]);
-
         if (!summary) return <div className="text-center p-8 text-gray-500">Cargando datos financieros...</div>;
         
         return (
@@ -135,7 +151,7 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
                     </div>
                     <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
                          <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg text-amber-300">Desglose de Gastos Fijos</h3><button onClick={handleOpenExpenseModalForNew} className="flex items-center gap-1 text-sm font-semibold py-1 px-2 rounded-lg transition-colors bg-purple-600 hover:bg-purple-500 text-white"><PlusIcon className="w-4 h-4" /> Añadir</button></div>
-                         <ul className="space-y-2">{fixedExpenses.map(e => (<li key={e._id} className="flex justify-between items-center text-sm group hover:bg-gray-700/50 p-1 rounded-md"><div><span className="text-gray-300">{e.name}</span></div><div className="flex items-center gap-3"><span className="font-semibold text-white">S/ {e.amount.toFixed(2)}</span><div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2"><button onClick={() => handleOpenExpenseModalForEdit(e)}><PencilIcon className="w-4 h-4 text-gray-400 hover:text-white"/></button><button onClick={() => handleDeleteExpense(e._id!)}><TrashIcon className="w-4 h-4 text-gray-400 hover:text-red-500"/></button></div></div></li>))}</ul>
+                         <ul className="space-y-2">{fixedExpenses?.map(e => (<li key={e._id} className="flex justify-between items-center text-sm group hover:bg-gray-700/50 p-1 rounded-md"><div><span className="text-gray-300">{e.name}</span></div><div className="flex items-center gap-3"><span className="font-semibold text-white">S/ {e.amount.toFixed(2)}</span><div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2"><button onClick={() => handleOpenExpenseModalForEdit(e)}><PencilIcon className="w-4 h-4 text-gray-400 hover:text-white"/></button><button onClick={() => handleDeleteExpense(e._id!)}><TrashIcon className="w-4 h-4 text-gray-400 hover:text-red-500"/></button></div></div></li>))}</ul>
                     </div>
                 </div>
             </div>
@@ -149,7 +165,7 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
                <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-700">
                <table className="w-full text-left">
                    <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase"><tr><th scope="col" className="px-4 py-3">Item</th><th scope="col" className="px-4 py-3 text-center">Costo Paquete</th><th scope="col" className="px-4 py-3 text-center">Cant. Paquete</th><th scope="col" className="px-4 py-3 text-center">Merma (uds)</th><th scope="col" className="px-4 py-3 text-center">Costo Unitario</th></tr></thead>
-                   <tbody>{flowerItems.map((item) => (<tr key={item.id} onDoubleClick={() => openCostModalForEdit(item, 'flower')} className="border-b border-gray-700 transition-colors cursor-pointer hover:bg-gray-700/40"><td className="px-4 py-3 font-medium text-white">{item.name}</td><td className="px-4 py-3 text-center text-white">S/ {item.costoPaquete || 0}</td><td className="px-4 py-3 text-center text-white">{item.cantidadPorPaquete || 0}</td><td className="px-4 py-3 text-center text-white">{item.merma || 0}</td><td className="px-4 py-3 text-center font-bold text-white">S/ {calculateUnitCost(item)}</td></tr>))}</tbody>
+                   <tbody>{(flowerItems || []).map((item) => (<tr key={item.id} onDoubleClick={() => openCostModalForEdit(item, 'flower')} className="border-b border-gray-700 transition-colors cursor-pointer hover:bg-gray-700/40"><td className="px-4 py-3 font-medium text-white">{item.name}</td><td className="px-4 py-3 text-center text-white">S/ {item.costoPaquete || 0}</td><td className="px-4 py-3 text-center text-white">{item.cantidadPorPaquete || 0}</td><td className="px-4 py-3 text-center text-white">{item.merma || 0}</td><td className="px-4 py-3 text-center font-bold text-white">S/ {calculateUnitCost(item)}</td></tr>))}</tbody>
                </table>
                </div>
                <p className="text-xs text-gray-500 mt-2">Haz doble click en una fila para editar sus valores de costo.</p>
@@ -159,7 +175,7 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
                <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-700">
                <table className="w-full text-left">
                    <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase"><tr><th scope="col" className="px-4 py-3">Item</th><th scope="col" className="px-4 py-3 text-center">Costo</th></tr></thead>
-                   <tbody>{fixedItems.map((item) => (<tr key={item.id} onDoubleClick={() => openCostModalForEdit(item, 'fixed')} className="border-b border-gray-700 transition-colors cursor-pointer hover:bg-gray-700/40"><td className="px-4 py-3 font-medium text-white">{item.name}</td><td className="px-4 py-3 text-center font-bold text-white">S/ {item.costo || 0}</td></tr>))}</tbody>
+                   <tbody>{(fixedItems || []).map((item) => (<tr key={item.id} onDoubleClick={() => openCostModalForEdit(item, 'fixed')} className="border-b border-gray-700 transition-colors cursor-pointer hover:bg-gray-700/40"><td className="px-4 py-3 font-medium text-white">{item.name}</td><td className="px-4 py-3 text-center font-bold text-white">S/ {item.costo || 0}</td></tr>))}</tbody>
                </table>
                </div>
                <p className="text-xs text-gray-500 mt-2">Haz doble click en una fila para editar su costo.</p>

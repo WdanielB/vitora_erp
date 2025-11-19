@@ -43,7 +43,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
 
     // --- Kardex Logic ---
     useEffect(() => {
-        if (activeTab === 'kardex' && !selectedItem && stockItems.length > 0) {
+        if (activeTab === 'kardex' && !selectedItem && stockItems && stockItems.length > 0) {
             setSelectedItem(stockItems[0]);
         }
     }, [stockItems, selectedItem, activeTab]);
@@ -54,7 +54,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                 setIsLoadingHistory(true);
                 try {
                     const data = await api.fetchStockHistory(selectedItem.itemId, user, selectedUserId);
-                    setHistory(data);
+                    setHistory(Array.isArray(data) ? data : []);
                 } catch (error) {
                     console.error("Failed to fetch stock history:", error);
                     setHistory([]);
@@ -68,7 +68,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
         }
     }, [selectedItem, user, selectedUserId, activeTab]);
 
-    const filteredItems = useMemo(() => stockItems.filter(item =>
+    const filteredItems = useMemo(() => (stockItems || []).filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase())
     ), [stockItems, searchTerm]);
 
@@ -241,7 +241,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                 <table className="w-full text-left">
                   <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase"><tr><th scope="col" className="px-4 py-3">Item</th><th scope="col" className="px-4 py-3 text-center">Precio Venta</th><th scope="col" className="px-4 py-3 text-center">Visible</th></tr></thead>
                   <tbody>
-                    {items.map((item) => (
+                    {(items || []).map((item) => (
                       <tr key={item.id} onClick={() => setSelectedId(item.id === selectedId ? null : item.id)} onDoubleClick={() => openProductModalForEdit(item, type)} className={`border-b border-gray-700 transition-colors cursor-pointer ${selectedId === item.id ? 'bg-purple-600/30' : 'hover:bg-gray-700/40'}`}>
                         <td className="px-4 py-3 font-medium text-white">{item.name}</td>
                         <td className="px-4 py-3 text-center text-white">S/ {item.price}</td>
@@ -289,7 +289,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
             
             {activeTab === 'kardex' ? renderKardex() : renderProducts()}
 
-            <StockModal isOpen={isStockModalOpen} onClose={() => setIsStockModalOpen(false)} onSave={handleSaveChanges} stockItems={stockItems} mode={modalMode}/>
+            <StockModal isOpen={isStockModalOpen} onClose={() => setIsStockModalOpen(false)} onSave={handleSaveChanges} stockItems={stockItems || []} mode={modalMode}/>
             <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} onSave={handleProductSave} item={editingProduct} itemType={productType}/>
         </div>
     );

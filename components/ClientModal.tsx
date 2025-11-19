@@ -30,14 +30,14 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onClientCrea
 
     try {
         await api.createClient(newClient);
-        onClientCreated(); // This will refetch all data, including clients
+        onClientCreated(); // Recarga datos en el padre
         setName('');
         setPhone('');
         setAddress('');
         onClose();
     } catch (error) {
         console.error("Failed to create client:", error);
-        // You can add an error message for the user here
+        alert("Error al crear el cliente. Inténtalo de nuevo.");
     } finally {
         setIsSaving(false);
     }
@@ -47,7 +47,7 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onClientCrea
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-[60] p-4"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center z-[60] p-4"
       onClick={onClose}
     >
       <div 
@@ -62,6 +62,7 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onClientCrea
               type="text" id="client-name" value={name} onChange={(e) => setName(e.target.value)}
               className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5"
               required autoFocus
+              placeholder="Ej. Juan Pérez"
             />
           </div>
           <div>
@@ -69,6 +70,7 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onClientCrea
             <input
               type="tel" id="client-phone" value={phone} onChange={(e) => setPhone(e.target.value)}
               className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5"
+              placeholder="999 999 999"
             />
           </div>
            <div>
@@ -76,6 +78,7 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onClientCrea
             <input
               type="text" id="client-address" value={address} onChange={(e) => setAddress(e.target.value)}
               className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5"
+              placeholder="Av. Principal 123"
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
