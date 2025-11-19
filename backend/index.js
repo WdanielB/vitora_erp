@@ -196,23 +196,61 @@ const createItemEndpoints = (collectionName, itemType) => {
         } catch (err) { res.status(500).json({ error: 'Error al crear item.' }); } finally { await session.endSession(); }
     });
 
-    // PUT (Update Item)
+    // PUT (Update Item + Log Price History)
     app.put(`/api/${collectionName}/:id`, async (req, res) => {
         const { id } = req.params; // Mongo _id
         const itemData = req.body;
         delete itemData._id; // Prevent updating _id
+        
+        const session = client.startSession();
         try {
-            await db.collection(collectionName).updateOne({ _id: new ObjectId(id) }, { $set: itemData });
+            await session.withTransaction(async () => {
+                // Check if cost changed for history
+                const oldItem = await db.collection(collectionName).findOne({ _id: new ObjectId(id) }, { session });
+                
+                await db.collection(collectionName).updateOne({ _id: new ObjectId(id) }, { $set: itemData }, { session });
+                
+                // Update name in stock if changed
+                if (itemData.name || itemData.id) {
+                    await db.collection('stock').updateOne(
+                        { itemId: itemData.id, userId: itemData.userId },
+                        { $set: { name: itemData.name } },
+                        { session }
+                    );
+                }
+                
+                // Record Price History if cost changed manually
+                if (oldItem) {
+                    let priceChanged = false;
+                    let newPrice = 0;
+                    
+                    if (itemType === 'flower') {
+                        if (itemData.costoPaquete !== undefined && itemData.costoPaquete !== oldItem.costoPaquete) {
+                            priceChanged = true;
+                            newPrice = itemData.costoPaquete;
+                        }
+                    } else { // Product
+                        if (itemData.costo !== undefined && itemData.costo !== oldItem.costo) {
+                            priceChanged = true;
+                            newPrice = itemData.costo;
+                        }
+                    }
+
+                    if (priceChanged) {
+                         await db.collection('record_price').insertOne({
+                            userId: itemData.userId,
+                            itemId: oldItem.id,
+                            itemName: itemData.name || oldItem.name,
+                            type: itemType,
+                            price: parseFloat(newPrice),
+                            date: new Date().toISOString()
+                        }, { session });
+                    }
+                }
+            });
             
-            // Update name in stock if changed
-            if (itemData.name || itemData.id) {
-                await db.collection('stock').updateOne(
-                    { itemId: itemData.id, userId: itemData.userId },
-                    { $set: { name: itemData.name } }
-                );
-            }
             res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); }
+        } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); } finally { await session.endSession(); }
     });
 
     // DELETE (Delete Item)
@@ -222,7 +260,6 @@ const createItemEndpoints = (collectionName, itemType) => {
             const item = await db.collection(collectionName).findOne({ _id: new ObjectId(id) });
             if (item) {
                 await db.collection(collectionName).deleteOne({ _id: new ObjectId(id) });
-                // Cleanup stock entry
                 await db.collection('stock').deleteOne({ itemId: item.id, userId: item.userId });
             }
             res.json({ success: true });
@@ -496,6 +533,7 @@ app.delete('/api/orders/:id', async (req, res) => {
             
             for (const item of order.items) {
                 if (item.itemId) {
+                    // We attempt to restore stock, but if the item doesn't exist anymore in stock, we proceed.
                     const stockItem = await db.collection('stock').findOne({ itemId: item.itemId, userId: order.userId }, { session });
                     if (stockItem) {
                         const quantityAfter = stockItem.quantity + item.quantity;
@@ -564,6 +602,50 @@ app.get('/api/backup/:userId', async (req, res) => {
         };
         res.json(data);
     } catch (e) { res.status(500).json({ error: 'Error generando backup' }); }
+});
+
+// RESTORE ENDPOINT
+app.post('/api/restore', async (req, res) => {
+    const { userId, data } = req.body;
+    if (!userId || !data) return res.status(400).json({ error: 'Datos incompletos' });
+    
+    const session = client.startSession();
+    try {
+        await session.withTransaction(async () => {
+             const collections = [
+                'flowers', 'products', 'variation_gifts', 'stock', 
+                'orders', 'clients', 'events', 'fixed_expenses', 'record_price'
+             ];
+             
+             for (const colName of collections) {
+                 if (data[colName] && Array.isArray(data[colName])) {
+                     const collection = db.collection(colName);
+                     // Delete existing data for this user
+                     await collection.deleteMany({ userId }, { session });
+                     
+                     // Insert new data if exists
+                     if (data[colName].length > 0) {
+                         const itemsToInsert = data[colName].map(item => {
+                             const { _id, ...rest } = item;
+                             // We keep _id as ObjectId if possible to maintain history links
+                             return { 
+                                 ...rest, 
+                                 _id: new ObjectId(_id), 
+                                 userId 
+                             };
+                         });
+                         await collection.insertMany(itemsToInsert, { session });
+                     }
+                 }
+             }
+        });
+        res.json({ success: true });
+    } catch (e) { 
+        console.error(e);
+        res.status(500).json({ error: 'Error al restaurar copia de seguridad' }); 
+    } finally { 
+        await session.endSession(); 
+    }
 });
 
 const PORT = process.env.PORT || 3001;

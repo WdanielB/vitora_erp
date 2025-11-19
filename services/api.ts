@@ -155,9 +155,19 @@ export const deleteFixedExpense = (id: string, u: string) => deleteData(`/api/fi
 export const fetchFinancialSummary = (user: User, id?: string | null) => fetchData<FinancialSummary>('/api/finance/summary', user, id);
 export const fetchRecordPrices = (user: User, id?: string | null) => fetchData<PriceRecord[]>('/api/record-prices', user, id);
 
-// Backup
+// Backup & Restore
 export const fetchFullBackup = async (userId: string) => {
     const response = await fetch(`${API_BASE_URL}/api/backup/${userId}`);
     if(!response.ok) throw new Error("Backup failed");
+    return await response.json();
+};
+
+export const restoreBackup = async (data: any, userId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, data })
+    });
+    if (!response.ok) throw new Error("Restore failed");
     return await response.json();
 };

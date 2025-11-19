@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { FlowerItem, ProductItem, User, View, UserRole } from '../types.ts';
 import * as api from '../services/api.ts';
 import { CloudArrowUpIcon } from './icons/CloudArrowUpIcon.tsx';
@@ -24,6 +24,7 @@ type SettingsViewTab = 'general' | 'users';
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ flowerItems, productItems, user, onUserPinsUpdate, allUsers, onUsersRefresh }) => {
   const [settingsView, setSettingsView] = useState<SettingsViewTab>('general');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // --- User Management States ---
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -56,6 +57,36 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ flowerItems, productItems
       } finally { setTimeout(() => setSyncStatus('idle'), 3000); }
   };
 
+  const handleUploadBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      if (!window.confirm("¡ADVERTENCIA! Esto SOBREESCRIBIRÁ todos los datos actuales con el contenido del archivo. ¿Estás seguro?")) {
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+          try {
+              setSyncStatus('syncing');
+              const json = JSON.parse(e.target?.result as string);
+              await api.restoreBackup(json, user._id);
+              setSyncStatus('success');
+              alert("Restauración completada. La página se recargará.");
+              window.location.reload();
+          } catch (error) {
+              console.error(error);
+              setSyncStatus('error');
+              alert("Error al restaurar el archivo. Asegúrate de que sea un backup válido.");
+          } finally {
+               if (fileInputRef.current) fileInputRef.current.value = '';
+               setTimeout(() => setSyncStatus('idle'), 3000);
+          }
+      };
+      reader.readAsText(file);
+  };
+
   // --- User CRUD Logic ---
   const handleOpenUserModalNew = () => { setEditingUser(null); setIsUserModalOpen(true); };
   const handleOpenUserModalEdit = (u: User) => { setEditingUser(u); setIsUserModalOpen(true); };
@@ -66,7 +97,35 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ flowerItems, productItems
   const handleSavePins = async () => { if (!selectedUserForPins) return; setPinSaveStatus('saving'); try { await api.updateUserPins(selectedUserForPins, pins, user._id); if (onUsersRefresh) onUsersRefresh(); setPinSaveStatus('success'); } catch(err) { setPinSaveStatus('error'); } finally { setTimeout(() => setPinSaveStatus('idle'), 3000); } };
 
   const renderGeneralContent = () => (
-     <div><h3 className="text-lg font-bold mb-3 text-cyan-300">Copia de Seguridad</h3><p className="text-sm text-gray-500 mb-4">Descarga un archivo con toda tu información (Inventario, Pedidos, Finanzas).</p><button onClick={handleDownloadBackup} className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg"><ArrowDownTrayIcon className="w-5 h-5"/> {syncStatus === 'syncing' ? 'Generando...' : 'Descargar Backup Completo'}</button></div>
+     <div className="space-y-8">
+        <div>
+            <h3 className="text-lg font-bold mb-3 text-cyan-300">Copia de Seguridad (Exportar)</h3>
+            <p className="text-sm text-gray-500 mb-4">Descarga un archivo con toda tu información (Inventario, Pedidos, Finanzas).</p>
+            <button onClick={handleDownloadBackup} className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg">
+                <ArrowDownTrayIcon className="w-5 h-5"/> {syncStatus === 'syncing' ? 'Generando...' : 'Descargar Backup Completo'}
+            </button>
+        </div>
+
+        <div className="pt-6 border-t border-gray-700">
+             <h3 className="text-lg font-bold mb-3 text-orange-400">Restaurar Datos (Importar)</h3>
+             <p className="text-sm text-gray-500 mb-4">Carga un archivo de backup para restaurar tu sistema. ⚠️ Esto borrará los datos actuales.</p>
+             <div className="flex items-center gap-4">
+                 <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    accept=".json"
+                    onChange={handleUploadBackup}
+                    className="hidden"
+                 />
+                 <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg border border-gray-600">
+                    <CloudArrowUpIcon className="w-5 h-5"/> Cargar Archivo de Respaldo
+                 </button>
+                 {syncStatus === 'syncing' && <span className="text-yellow-500 text-sm">Restaurando...</span>}
+                 {syncStatus === 'success' && <span className="text-green-500 text-sm">¡Éxito!</span>}
+                 {syncStatus === 'error' && <span className="text-red-500 text-sm">Error</span>}
+             </div>
+        </div>
+     </div>
   );
 
   const renderUsersContent = () => (

@@ -176,7 +176,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                                     <th className="px-4 py-3">Nombre</th>
                                     {activeTab === 'flowers' ? (
                                         <>
-                                            <th className="px-4 py-3 text-center">Paquetes (Ref)</th>
+                                            <th className="px-4 py-3 text-center">Costo Paq.</th>
                                             <th className="px-4 py-3 text-center">Tallos/Paq</th>
                                             <th className="px-4 py-3 text-center">Stock (Tallos)</th>
                                         </>
@@ -202,9 +202,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                                             <td className="px-4 py-3 font-medium text-white">{item.name}</td>
                                             {isFlower ? (
                                                 <>
-                                                    <td className="px-4 py-3 text-center text-gray-400">
-                                                        {flowerDetails ? `~${(item.quantity / (flowerDetails.cantidadPorPaquete || 1)).toFixed(1)}` : '-'}
-                                                    </td>
+                                                    <td className="px-4 py-3 text-center text-gray-300">S/ {flowerDetails?.costoPaquete?.toFixed(2) || '0.00'}</td>
                                                     <td className="px-4 py-3 text-center text-gray-400">{flowerDetails?.cantidadPorPaquete || 1}</td>
                                                     <td className={`px-4 py-3 text-center font-bold ${item.quantity <= item.criticalStock ? 'text-red-400' : 'text-green-400'}`}>{item.quantity}</td>
                                                 </>
