@@ -2,22 +2,26 @@
 import type { FlowerItem, FixedItem, User, StockItem, Order, Event, FixedExpense, FinancialSummary, Client, StockMovement, View } from '../types.ts';
 import { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } from '../constants.ts';
 
-// CAMBIO: Apuntar al servidor local para desarrollo.
-const API_BASE_URL = 'http://localhost:3001'; 
+// Apuntar al servidor de producción en Render
+const API_BASE_URL = 'https://ad-erp-backend.onrender.com'; 
 
 // --- Mock Data Helpers ---
 const MOCK_DELAY = 400; // Simula latencia de red ligera
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- Health Check ---
-export const checkBackendHealth = async (): Promise<boolean> => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/health`);
-        return response.ok;
-    } catch (error) {
-        return false;
+// --- Health Check con Reintentos (Ping-Pong para Render Cold Start) ---
+export const checkBackendHealth = async (retries = 5, delay = 2000): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/health`);
+            if (response.ok) return true;
+        } catch (error) {
+            // Si falla, esperamos y reintentamos (el servidor puede estar despertando)
+            if (i < retries - 1) await sleep(delay);
+        }
     }
+    return false;
 };
 
 // --- Authentication ---
@@ -133,7 +137,12 @@ const postData = async <T, R>(endpoint: string, data: T, requesterId?: string): 
     
     if (!response.ok) {
         const text = await response.text();
-        throw new Error(text ? JSON.parse(text).error : `Error ${response.status}`);
+        let errorMessage = `Error ${response.status}`;
+        try {
+            const json = JSON.parse(text);
+            if (json.error) errorMessage = json.error;
+        } catch (e) {}
+        throw new Error(errorMessage);
     }
     const text = await response.text();
     return text ? JSON.parse(text) : {} as R;
@@ -145,7 +154,15 @@ const putData = async <T, R>(endpoint: string, data: T, requesterId?: string): P
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (requesterId) headers['x-user-id'] = requesterId;
     const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(data) });
-    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    if (!response.ok) {
+        const text = await response.text();
+        let errorMessage = `Error ${response.status}`;
+        try {
+            const json = JSON.parse(text);
+            if (json.error) errorMessage = json.error;
+        } catch (e) {}
+        throw new Error(errorMessage);
+    }
     return await response.json();
 };
 
@@ -155,7 +172,17 @@ const deleteData = async (endpoint: string, requesterId?: string): Promise<{ suc
     const headers: HeadersInit = {};
     if (requesterId) headers['x-user-id'] = requesterId;
     const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE', headers });
-    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    
+    if (!response.ok) {
+        const text = await response.text();
+        let errorMessage = `Error ${response.status}`;
+        try {
+            const json = JSON.parse(text);
+            if (json.error) errorMessage = json.error;
+        } catch (e) {}
+        throw new Error(errorMessage);
+    }
+    
     return await response.json();
 };
 
@@ -176,6 +203,9 @@ const updateData = async <T>(endpoint: string, items: T[], userId: string): Prom
 
 // Users & Auth
 export const fetchUsers = (user: User): Promise<User[]> => fetchData('/api/users', user);
+export const createUser = (userData: Omit<User, '_id' | 'createdAt'> & { password: string }, adminId: string): Promise<{ success: boolean }> => postData('/api/users', userData, adminId);
+export const updateUser = (userId: string, userData: Partial<User> & { password?: string }, adminId: string): Promise<{ success: boolean }> => putData(`/api/users/${userId}`, userData, adminId);
+export const deleteUser = (userIdToDelete: string, adminId: string): Promise<{ success: boolean }> => deleteData(`/api/users/${userIdToDelete}`, adminId);
 export const updateUserPins = (userIdToUpdate: string, pins: { [key in View]?: string }, adminId: string): Promise<{ success: boolean }> => {
     return postData(`/api/users/pins`, { userId: userIdToUpdate, pins }, adminId);
 };

@@ -220,9 +220,7 @@ createDataEndpoints('clients', 'clients');
 createDataEndpoints('events', 'events');
 createDataEndpoints('fixed-expenses', 'fixed_expenses');
 
-// --- Custom Endpoints ---
-
-// User management for admin
+// --- User management for admin (CRUD) ---
 app.get('/api/users', async (req, res) => {
     const { role } = req.query;
     if (role !== 'admin') {
@@ -235,6 +233,128 @@ app.get('/api/users', async (req, res) => {
         res.status(500).json({ error: 'Error al obtener usuarios.' });
     }
 });
+
+app.post('/api/users', async (req, res) => {
+    const { username, password, role } = req.body;
+    const requesterId = req.headers['x-user-id'];
+
+    if (!username || !password || !role || !requesterId) {
+        return res.status(400).json({ error: 'Datos incompletos.' });
+    }
+
+    try {
+        const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
+        if (!requester || requester.role !== 'admin') {
+            return res.status(403).json({ error: 'Solo administradores pueden crear usuarios.' });
+        }
+
+        const existingUser = await db.collection('users').findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } });
+        if (existingUser) {
+            return res.status(400).json({ error: 'El nombre de usuario ya existe.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const newUser = {
+            username,
+            password: hashedPassword,
+            role,
+            createdAt: new Date(),
+            modulePins: {}
+        };
+
+        const result = await db.collection('users').insertOne(newUser);
+        
+        // Si es un usuario normal, sembramos datos iniciales
+        if (role === 'user') {
+            await seedInitialDataForUser(result.insertedId.toString());
+        }
+
+        res.status(201).json({ success: true, userId: result.insertedId });
+    } catch (err) {
+        console.error("Error creando usuario:", err);
+        res.status(500).json({ error: 'Error al crear usuario.' });
+    }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { username, password, role } = req.body;
+    const requesterId = req.headers['x-user-id'];
+
+    try {
+        if (!ObjectId.isValid(id)) {
+             return res.status(400).json({ error: 'ID de usuario inválido.' });
+        }
+
+        const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
+        if (!requester || requester.role !== 'admin') {
+            return res.status(403).json({ error: 'Acceso denegado.' });
+        }
+
+        const userToUpdate = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        if (!userToUpdate) {
+             return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+        
+        // Protección extra para el usuario ADMIN
+        if (userToUpdate.username === 'ADMIN' && username !== 'ADMIN') {
+             return res.status(400).json({ error: 'No se puede cambiar el nombre de usuario del Super Admin.' });
+        }
+
+        const updateData = { username, role };
+        if (password && password.trim() !== '') {
+            updateData.password = await bcrypt.hash(password, saltRounds);
+        }
+
+        await db.collection('users').updateOne({ _id: new ObjectId(id) }, { $set: updateData });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Error al actualizar usuario.' });
+    }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const requesterId = req.headers['x-user-id'];
+
+    try {
+        if (!ObjectId.isValid(id)) {
+             return res.status(400).json({ error: 'ID de usuario inválido.' });
+        }
+
+        const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
+        if (!requester || requester.role !== 'admin') {
+            return res.status(403).json({ error: 'Acceso denegado.' });
+        }
+        
+        if (id === requesterId) {
+             return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta.' });
+        }
+
+        // Obtener usuario a eliminar para verificar si es ADMIN
+        const userToDelete = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        
+        if (!userToDelete) {
+            return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+
+        if (userToDelete.username === 'ADMIN') {
+            return res.status(403).json({ error: 'No se puede eliminar al Super Admin del sistema.' });
+        }
+
+        await db.collection('users').deleteOne({ _id: new ObjectId(id) });
+        // Opcional: Borrar datos relacionados (Cascade delete)
+        // await db.collection('orders').deleteMany({ userId: id });
+        // await db.collection('stock').deleteMany({ userId: id });
+        // ... etc. Por seguridad, mantenemos los datos por ahora.
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Error borrando usuario:", err);
+        res.status(500).json({ error: 'Error interno del servidor al eliminar usuario.' });
+    }
+});
+
 
 app.post('/api/users/pins', async (req, res) => {
     const { userId, pins } = req.body;

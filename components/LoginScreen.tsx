@@ -136,14 +136,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </div>
             
             {/* DB Status Indicator */}
-            <div className="absolute bottom-4 flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity" onClick={checkConnection} title="Click para re-conectar">
+            <div className="absolute bottom-4 flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity" onClick={checkConnection} title="Click para intentar reconectar">
                 <div className={`w-2.5 h-2.5 rounded-full ${
                     dbStatus === 'checking' ? 'bg-yellow-400 animate-pulse' :
                     dbStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'
                 }`}></div>
                 <span className="text-xs text-gray-400 font-medium">
-                    {dbStatus === 'checking' ? 'Verificando servidor...' :
-                     dbStatus === 'connected' ? 'Servidor & DB Conectados' : 'Sin conexión al servidor'}
+                    {dbStatus === 'checking' ? 'Despertando servidor (aprox. 50s)...' :
+                     dbStatus === 'connected' ? 'Servidor Online & Listo' : 'Servidor en reposo. Click para despertar.'}
                 </span>
             </div>
         </div>

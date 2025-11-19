@@ -157,7 +157,7 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
       case 'orders': return panelWrapper(<OrdersPanel orders={orders || []} allItems={[...(flowerItems || []), ...(fixedItems || [])]} clients={clients || []} onDataNeedsRefresh={() => loadData(selectedUserId)} user={user} />);
       case 'calendar': return panelWrapper(<CalendarPanel events={events || []} orders={orders || []} user={user} onDataNeedsRefresh={() => loadData(selectedUserId)} />, true);
       case 'finance': return panelWrapper(<FinancePanel summary={financialSummary} fixedExpenses={fixedExpenses || []} orders={orders || []} user={user} onDataNeedsRefresh={() => loadData(selectedUserId)} flowerItems={flowerItems || []} setFlowerItems={handleSetFlowerItems} fixedItems={fixedItems || []} setFixedItems={handleSetFixedItems} />, true);
-      case 'settings': return <SettingsPanel flowerItems={flowerItems || []} fixedItems={fixedItems || []} user={user} onUserPinsUpdate={onUserPinsUpdate} allUsers={allUsers || []} />;
+      case 'settings': return <SettingsPanel flowerItems={flowerItems || []} fixedItems={fixedItems || []} user={user} onUserPinsUpdate={onUserPinsUpdate} allUsers={allUsers || []} onUsersRefresh={() => loadData(selectedUserId)} />;
       default: return panelWrapper(<DashboardPanel orders={orders} financialSummary={financialSummary} stockItems={stock} />);
     }
   }
