@@ -1,5 +1,5 @@
 
-import type { FlowerItem, FixedItem, View } from './types.ts';
+import type { FlowerItem, ProductItem, VariationGift, View } from './types.ts';
 
 const INITIAL_DATE = new Date('2023-10-27T10:00:00Z').toISOString();
 
@@ -34,8 +34,16 @@ export const DEFAULT_FLOWER_ITEMS: FlowerItem[] = [
   { id: 'f17', name: "Lisianthus", price: 7, visible: true, imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5wDA3Jb8sQ_9sZ7p5wY9x2X3c7v8n9f0fGg&s", costoPaquete: 40, cantidadPorPaquete: 12, merma: 1, costHistory: [{ date: INITIAL_DATE, costoPaquete: 40 }], userId: '' }
 ];
 
-export const DEFAULT_FIXED_ITEMS: FixedItem[] = [
-  { id: 't1', name: 'Box', price: 20, visible: true, imageUrl: 'https://magia.pe/cdn/shop/files/magia-diadelamadre-2.png?v=1713231274', costo: 10, costHistory: [{ date: INITIAL_DATE, costo: 10 }], userId: '' },
-  { id: 't2', name: 'Ramo Coreano', price: 10, visible: true, imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqI_cbXsL6cMxTQBNwelQ7QO6UV3gzG4Y03xR62-2eEnqqu1sIN0xEW2s&s=10', costo: 4, costHistory: [{ date: INITIAL_DATE, costo: 4 }], userId: '' },
-  { id: 't3', name: 'Ramo Simple', price: 5, visible: true, imageUrl: 'https://rosatelpe.vtexassets.com/arquivos/ids/158793-1200-1200?v=638845535133070000&width=1200&height=1200&aspect=true', costo: 2, costHistory: [{ date: INITIAL_DATE, costo: 2 }], userId: '' },
+export const DEFAULT_PRODUCTS: ProductItem[] = [
+  { id: 'p1', name: 'Ferrero Rocher x8', price: 25, visible: true, imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQJ8Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q&s', costo: 15, stock: 20, costHistory: [{ date: INITIAL_DATE, costo: 15 }], userId: '' },
+  { id: 'p2', name: 'Peluche Oso Pequeño', price: 35, visible: true, imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQJ8Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q&s', costo: 18, stock: 10, costHistory: [{ date: INITIAL_DATE, costo: 18 }], userId: '' },
 ];
+
+export const DEFAULT_VARIATION_GIFTS: VariationGift[] = [
+  { id: 'v1', name: 'Box', price: 20, visible: true, imageUrl: 'https://magia.pe/cdn/shop/files/magia-diadelamadre-2.png?v=1713231274', costo: 10, costHistory: [{ date: INITIAL_DATE, costo: 10 }], userId: '' },
+  { id: 'v2', name: 'Ramo Coreano', price: 10, visible: true, imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqI_cbXsL6cMxTQBNwelQ7QO6UV3gzG4Y03xR62-2eEnqqu1sIN0xEW2s&s=10', costo: 4, costHistory: [{ date: INITIAL_DATE, costo: 4 }], userId: '' },
+  { id: 'v3', name: 'Ramo Simple', price: 5, visible: true, imageUrl: 'https://rosatelpe.vtexassets.com/arquivos/ids/158793-1200-1200?v=638845535133070000&width=1200&height=1200&aspect=true', costo: 2, costHistory: [{ date: INITIAL_DATE, costo: 2 }], userId: '' },
+];
+
+// Alias for backward compatibility if needed, though usage implies ProductItem structure mostly.
+export const DEFAULT_FIXED_ITEMS = DEFAULT_PRODUCTS;

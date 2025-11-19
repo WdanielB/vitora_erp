@@ -5,25 +5,49 @@ export interface CostHistoryEntry {
   costoPaquete?: number; // Para flores
 }
 
+// Nueva interfaz para el registro histórico de precios en base de datos propia
+export interface PriceRecord {
+    _id?: string;
+    userId: string;
+    itemId: string;
+    itemName: string;
+    type: 'flower' | 'product' | 'gift';
+    price: number; // Costo registrado
+    date: string;
+}
+
 export interface Item {
   id: string;
   name: string;
-  price: number;
+  price: number; // Precio de Venta
   visible: boolean;
   imageUrl?: string;
-  costo?: number;
-  costHistory?: CostHistoryEntry[];
   userId: string;
+  costHistory?: CostHistoryEntry[];
 }
 
+// Flores: Tienen costo por paquete, cantidad por paquete y merma
 export interface FlowerItem extends Item {
-  imageUrl: string;
   costoPaquete?: number;
   cantidadPorPaquete?: number;
   merma?: number;
+  // Helper calculado en frontend, no en DB obligatoriamente
+  unitCost?: number; 
 }
 
-export type FixedItem = Item;
+// Productos (Chocolates, Peluches, Bebidas): Tienen costo unitario directo
+export interface ProductItem extends Item {
+    costo: number;
+    stock: number; // Inventario directo
+}
+
+// Variation Gift (Tipos de Ramos, Cajas): Solo para configuración de cotización
+export interface VariationGift extends Item {
+    costo: number; // Costo de la base/mano de obra
+}
+
+// Deprecated legacy type alias, kept for potential transition compatibility
+export type FixedItem = ProductItem; 
 
 export type UserRole = 'admin' | 'user';
 export interface User {
@@ -78,11 +102,11 @@ export interface Order {
 
 export interface StockItem {
     _id?: string;
-    itemId: string; // Corresponds to FlowerItem or FixedItem id
+    itemId: string; // Corresponds to FlowerItem or ProductItem id
     userId: string;
     name: string;
-    type: 'flower' | 'fixed';
-    quantity: number; // For flowers, this is in stems. For fixed, in units.
+    type: 'flower' | 'product';
+    quantity: number; // For flowers, this is in stems. For products, in units.
     criticalStock: number;
 }
 

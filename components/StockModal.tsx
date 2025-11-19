@@ -5,7 +5,7 @@ import type { StockItem } from '../types';
 interface StockModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (updates: { itemId: string, change: number, type: 'flower' | 'fixed', newCost?: number, isPackage?: boolean }[]) => void;
+    onSave: (updates: { itemId: string, change: number, type: 'flower' | 'product', newCost?: number, isPackage?: boolean }[]) => void;
     stockItems: StockItem[];
     mode: 'add' | 'remove' | 'ajuste';
 }
@@ -45,7 +45,7 @@ const StockModal: React.FC<StockModalProps> = ({ isOpen, onClose, onSave, stockI
         type StockUpdatePayload = { 
             itemId: string; 
             change: number; 
-            type: 'flower' | 'fixed'; 
+            type: 'flower' | 'product'; 
             newCost?: number; 
             isPackage?: boolean 
         };

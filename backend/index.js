@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const bcrypt = require('bcrypt');
-const { DEFAULT_FLOWER_ITEMS, DEFAULT_FIXED_ITEMS } = require('./constants');
+const { DEFAULT_FLOWER_ITEMS, DEFAULT_PRODUCTS, DEFAULT_VARIATION_GIFTS } = require('./constants');
 
 const app = express();
 app.use(cors());
@@ -26,37 +26,63 @@ let db;
 const seedInitialDataForUser = async (userId) => {
     const collections = {
         flowers: db.collection('flowers'),
-        fixed_items: db.collection('fixed_items'),
+        products: db.collection('products'),
+        variation_gifts: db.collection('variation_gifts'),
         stock: db.collection('stock'),
         events: db.collection('events'),
         fixed_expenses: db.collection('fixed_expenses'),
+        record_price: db.collection('record_price'), // Historial de costos
     };
+
     const userFlowers = DEFAULT_FLOWER_ITEMS.map(item => ({...item, userId}));
-    const userFixedItems = DEFAULT_FIXED_ITEMS.map(item => ({...item, userId}));
+    const userProducts = DEFAULT_PRODUCTS.map(item => ({...item, userId}));
+    const userGifts = DEFAULT_VARIATION_GIFTS.map(item => ({...item, userId}));
+
     await collections.flowers.insertMany(userFlowers);
-    await collections.fixed_items.insertMany(userFixedItems);
-    const allItems = [...userFlowers, ...userFixedItems];
-    const initialStock = allItems.map(item => ({
-        itemId: item.id,
-        userId,
-        name: item.name,
-        type: item.id.startsWith('f') ? 'flower' : 'fixed',
-        quantity: 0,
-        criticalStock: item.id.startsWith('f') ? (item.cantidadPorPaquete || 10) * 2 : 10,
-    }));
+    await collections.products.insertMany(userProducts);
+    await collections.variation_gifts.insertMany(userGifts);
+
+    // Seed Stock (Only Flowers and Products have stock, Gifts are "service/base")
+    const initialStock = [
+        ...userFlowers.map(item => ({
+            itemId: item.id, userId, name: item.name, type: 'flower', quantity: 0, criticalStock: (item.cantidadPorPaquete || 10) * 2
+        })),
+        ...userProducts.map(item => ({
+            itemId: item.id, userId, name: item.name, type: 'product', quantity: item.stock || 0, criticalStock: 5
+        }))
+    ];
+
     if (initialStock.length > 0) {
         await collections.stock.insertMany(initialStock);
     }
+
+    // Seed Record Price (Initial Costs)
+    const initialPrices = [
+        ...userFlowers.map(item => ({
+             userId, itemId: item.id, itemName: item.name, type: 'flower', price: item.costoPaquete, date: new Date().toISOString()
+        })),
+        ...userProducts.map(item => ({
+             userId, itemId: item.id, itemName: item.name, type: 'product', price: item.costo, date: new Date().toISOString()
+        })),
+        ...userGifts.map(item => ({
+             userId, itemId: item.id, itemName: item.name, type: 'gift', price: item.costo, date: new Date().toISOString()
+        }))
+    ];
+    await collections.record_price.insertMany(initialPrices);
+
+
     const initialEvents = [
         { name: "Día de San Valentín", date: "2025-02-14T05:00:00.000Z", userId },
         { name: "Día de la Madre", date: "2025-05-11T05:00:00.000Z", userId },
     ];
     await collections.events.insertMany(initialEvents);
+
     const initialExpenses = [
       { name: "Alquiler Taller", amount: 800, userId },
       { name: "Servicios (Luz, Agua)", amount: 250, userId },
     ];
     await collections.fixed_expenses.insertMany(initialExpenses);
+
     console.log(`Datos iniciales sembrados para el usuario ${userId}`);
 };
 
@@ -64,12 +90,10 @@ const ensureInitialUsers = async () => {
     try {
         const usersCollection = db.collection('users');
         
-        // 1. Asegurar admin (minúsculas)
-        // Usamos regex para verificar si existe 'admin' o 'ADMIN' para no duplicar
-        const adminUser = await usersCollection.findOne({ username: { $regex: /^admin$/i } });
+        const adminUser = await usersCollection.findOne({ username: 'admin' });
         if (!adminUser) {
             console.log("Creando Super Usuario admin...");
-            const hashedPassword = await bcrypt.hash('admin123', saltRounds); // Default pass
+            const hashedPassword = await bcrypt.hash('admin123', saltRounds);
             await usersCollection.insertOne({
                 username: 'admin',
                 password: hashedPassword,
@@ -77,23 +101,19 @@ const ensureInitialUsers = async () => {
                 modulePins: { finance: '1234', settings: '1234' },
                 createdAt: new Date()
             });
-             console.log("Usuario admin creado (Pass: admin123).");
         }
 
-        // 2. Asegurar Usuario Empleado (floreria1) minúsculas
-        const demoUser = await usersCollection.findOne({ username: { $regex: /^floreria1$/i } });
+        const demoUser = await usersCollection.findOne({ username: 'floreria1' });
         if (!demoUser) {
             console.log("Creando Usuario Empleado de prueba (floreria1)...");
-            const hashedPassword = await bcrypt.hash('user123', saltRounds); // Default pass
+            const hashedPassword = await bcrypt.hash('user123', saltRounds);
             const result = await usersCollection.insertOne({
                 username: 'floreria1',
                 password: hashedPassword,
                 role: 'user',
                 createdAt: new Date()
             });
-            // Sembrar datos para este usuario para que no empiece vacío
             await seedInitialDataForUser(result.insertedId.toString());
-            console.log("Usuario floreria1 creado (Pass: user123).");
         }
 
     } catch (error) {
@@ -103,95 +123,55 @@ const ensureInitialUsers = async () => {
 
 
 // --- API Endpoints ---
-app.get('/', (req, res) => {
-  res.send('AD ERP ESTA ON LAI (stá funcionando con MongoDB y autenticación!)');
-});
-
-// --- HEALTH CHECK ENDPOINT ---
+app.get('/', (req, res) => { res.send('AD ERP ONLINE'); });
 app.get('/api/health', async (req, res) => {
-    try {
-        // Ejecuta un comando ping simple a la base de datos
-        await db.command({ ping: 1 });
-        res.json({ status: 'ok', message: 'Conexión exitosa a MongoDB' });
-    } catch (error) {
-        console.error("Health check failed:", error);
-        res.status(500).json({ status: 'error', message: 'No se pudo conectar a la base de datos', error: error.message });
-    }
+    try { await db.command({ ping: 1 }); res.json({ status: 'ok', message: 'Conexión exitosa a MongoDB' }); } 
+    catch (error) { res.status(500).json({ status: 'error', message: 'No se pudo conectar a la base de datos', error: error.message }); }
 });
 
 // --- Auth Endpoint ---
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Usuario y contraseña son requeridos.' });
-    }
+    if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos.' });
     try {
         const usersCollection = db.collection('users');
-        // Case insensitive login
         const user = await usersCollection.findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } });
-        if (!user) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-        }
+        if (!user) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+        
         const match = await bcrypt.compare(password, user.password);
         if (match) {
             const userIdString = user._id.toString();
-            
-            // Seed data for regular users if first time (redundancy check)
             if (user.role !== 'admin') {
                  const flowerCount = await db.collection('flowers').countDocuments({ userId: userIdString });
-                 if (flowerCount === 0) {
-                     await seedInitialDataForUser(userIdString);
-                 }
+                 if (flowerCount === 0) await seedInitialDataForUser(userIdString);
             }
-            
             const { password, ...userWithoutPassword } = user;
             res.json({ ...userWithoutPassword, _id: userIdString });
         } else {
             res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
         }
-    } catch (err) {
-        console.error('Error en el login:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error interno del servidor.' }); }
 });
 
-
-// --- Data Endpoints (Role-Based Access Control) ---
+// --- Generic Endpoints Creator ---
 const createDataEndpoints = (endpointName, collectionName) => {
     app.get(`/api/${endpointName}`, async (req, res) => {
         const { userId, role, selectedUserId } = req.query;
         if (!userId) return res.status(400).json({ error: 'userId es requerido.' });
-        
         try {
             let query = { userId };
             if (role === 'admin') {
-                if (selectedUserId && selectedUserId !== 'all') {
-                    query = { userId: selectedUserId };
-                } else {
-                    // If looking at all, user needs to own data or be admin. 
-                    // For simpler logic in this MVP, Admin sees specific user data or their own.
-                    // Ideally 'all' would aggregate, but for item lists it's messy.
-                    // Default to admin's own data if 'all' is selected for catalogs.
-                    if (endpointName === 'orders' || endpointName === 'stock/history') {
-                         query = {}; // See everything for orders/history
-                    } else {
-                         query = { userId }; // Fallback for catalogs
-                    }
-                }
+                if (selectedUserId && selectedUserId !== 'all') query = { userId: selectedUserId };
+                else if (['orders', 'stock/history', 'record-prices'].includes(endpointName)) query = {};
             }
             const items = await db.collection(collectionName).find(query).toArray();
             res.json(items);
-        } catch (err) {
-            console.error(`Error al obtener ${endpointName}:`, err);
-            res.status(500).json({ error: 'Error interno del servidor.' });
-        }
+        } catch (err) { res.status(500).json({ error: 'Error interno del servidor.' }); }
     });
 
     app.put(`/api/${endpointName}`, async (req, res) => {
         const { items, userId } = req.body;
-        if (!Array.isArray(items) || !userId) {
-            return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
-        }
+        if (!Array.isArray(items) || !userId) return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
         const session = client.startSession();
         try {
             await session.withTransaction(async () => {
@@ -204,595 +184,309 @@ const createDataEndpoints = (endpointName, collectionName) => {
             });
             const updatedItems = await db.collection(collectionName).find({ userId }).toArray();
             res.status(200).json(updatedItems);
-        } catch (err) {
-            console.error(`Error al actualizar ${endpointName}:`, err);
-            res.status(500).json({ error: 'Error interno del servidor al actualizar.' });
-        } finally {
-            await session.endSession();
-        }
+        } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); } 
+        finally { await session.endSession(); }
     });
 };
 
 createDataEndpoints('flowers', 'flowers');
-createDataEndpoints('fixed-items', 'fixed_items');
+createDataEndpoints('products', 'products'); // Was fixed-items
+createDataEndpoints('variation-gifts', 'variation_gifts'); // New
 createDataEndpoints('stock', 'stock');
 createDataEndpoints('orders', 'orders');
 createDataEndpoints('clients', 'clients');
 createDataEndpoints('events', 'events');
 createDataEndpoints('fixed-expenses', 'fixed_expenses');
+createDataEndpoints('record-prices', 'record_price'); // New
 
-// --- User management for admin (CRUD) ---
+// --- User CRUD ---
 app.get('/api/users', async (req, res) => {
     const { role } = req.query;
-    if (role !== 'admin') {
-        return res.status(403).json({ error: 'Acceso denegado.' });
-    }
-    try {
-        const users = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
-        res.json(users);
-    } catch(err) {
-        res.status(500).json({ error: 'Error al obtener usuarios.' });
-    }
+    if (role !== 'admin') return res.status(403).json({ error: 'Acceso denegado.' });
+    try { res.json(await db.collection('users').find({}, { projection: { password: 0 } }).toArray()); } catch(err) { res.status(500).json({ error: 'Error.' }); }
 });
 
 app.post('/api/users', async (req, res) => {
     const { username, password, role } = req.body;
     const requesterId = req.headers['x-user-id'];
-
-    if (!username || !password || !role || !requesterId) {
-        return res.status(400).json({ error: 'Datos incompletos.' });
-    }
-
+    if (!username || !password || !role || !requesterId) return res.status(400).json({ error: 'Datos incompletos.' });
     try {
         const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
-        if (!requester || requester.role !== 'admin') {
-            return res.status(403).json({ error: 'Solo administradores pueden crear usuarios.' });
-        }
-
+        if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado.' });
+        
         const existingUser = await db.collection('users').findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } });
-        if (existingUser) {
-            return res.status(400).json({ error: 'El nombre de usuario ya existe.' });
-        }
+        if (existingUser) return res.status(400).json({ error: 'El usuario ya existe.' });
 
         const hashedPassword = await bcrypt.hash(password, saltRounds);
-        const newUser = {
-            username,
-            password: hashedPassword,
-            role,
-            createdAt: new Date(),
-            modulePins: {}
-        };
-
-        const result = await db.collection('users').insertOne(newUser);
-        
-        // Si es un usuario normal, sembramos datos iniciales
-        if (role === 'user') {
-            await seedInitialDataForUser(result.insertedId.toString());
-        }
-
+        const result = await db.collection('users').insertOne({ username: username.toLowerCase(), password: hashedPassword, role, createdAt: new Date(), modulePins: {} });
+        if (role === 'user') await seedInitialDataForUser(result.insertedId.toString());
         res.status(201).json({ success: true, userId: result.insertedId });
-    } catch (err) {
-        console.error("Error creando usuario:", err);
-        res.status(500).json({ error: 'Error al crear usuario.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error al crear usuario.' }); }
 });
 
 app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { username, password, role } = req.body;
     const requesterId = req.headers['x-user-id'];
-
     try {
-        if (!ObjectId.isValid(id)) {
-             return res.status(400).json({ error: 'ID de usuario inválido.' });
-        }
-
+        if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'ID inválido.' });
         const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
-        if (!requester || requester.role !== 'admin') {
-            return res.status(403).json({ error: 'Acceso denegado.' });
-        }
-
-        const userToUpdate = await db.collection('users').findOne({ _id: new ObjectId(id) });
-        if (!userToUpdate) {
-             return res.status(404).json({ error: 'Usuario no encontrado.' });
-        }
-        
-        // Validación: No permitir quitar rol de admin al último admin
-        if (userToUpdate.role === 'admin' && role !== 'admin') {
-             const adminCount = await db.collection('users').countDocuments({ role: 'admin' });
-             if (adminCount <= 1) {
-                 return res.status(400).json({ error: 'No puedes quitar el rol de administrador al último admin del sistema.' });
-             }
-        }
-
-        const updateData = { username, role };
-        if (password && password.trim() !== '') {
-            updateData.password = await bcrypt.hash(password, saltRounds);
-        }
-
+        if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado.' });
+        const updateData = { username: username.toLowerCase(), role };
+        if (password?.trim()) updateData.password = await bcrypt.hash(password, saltRounds);
         await db.collection('users').updateOne({ _id: new ObjectId(id) }, { $set: updateData });
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Error al actualizar usuario.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); }
 });
 
 app.delete('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const requesterId = req.headers['x-user-id'];
-
     try {
-        if (!ObjectId.isValid(id)) {
-             return res.status(400).json({ error: 'ID de usuario inválido.' });
-        }
-
+        if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'ID inválido.' });
         const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
-        if (!requester || requester.role !== 'admin') {
-            return res.status(403).json({ error: 'Acceso denegado.' });
-        }
-        
-        if (id === requesterId) {
-             return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta.' });
-        }
-
-        // ELIMINADO: Restricción de "último administrador".
-        // Ahora se permite borrar cualquier usuario (incluidos otros admins),
-        // excepto el usuario que está logueado actualmente (validado arriba).
-        
+        if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado.' });
+        if (id === requesterId) return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta.' });
         const result = await db.collection('users').deleteOne({ _id: new ObjectId(id) });
-
-        if (result.deletedCount === 0) {
-             return res.status(404).json({ error: 'Usuario no encontrado para eliminar.' });
-        }
-        
+        if (result.deletedCount === 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
         res.json({ success: true });
-    } catch (err) {
-        console.error("Error borrando usuario:", err);
-        res.status(500).json({ error: 'Error interno del servidor al eliminar usuario.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error al eliminar.' }); }
 });
-
 
 app.post('/api/users/pins', async (req, res) => {
     const { userId, pins } = req.body;
     const requesterId = req.headers['x-user-id'];
-    if (!userId || !pins || !requesterId) {
-        return res.status(400).json({ error: 'userId, pins y x-user-id son requeridos.' });
-    }
     try {
         const requester = await db.collection('users').findOne({ _id: new ObjectId(requesterId) });
-        if (requester.role !== 'admin' && userId !== requesterId) {
-            return res.status(403).json({ error: 'Acceso denegado. Solo los administradores pueden cambiar los PINs de otros usuarios.' });
-        }
-
-        await db.collection('users').updateOne(
-            { _id: new ObjectId(userId) },
-            { $set: { modulePins: pins } }
-        );
+        if (requester.role !== 'admin' && userId !== requesterId) return res.status(403).json({ error: 'Acceso denegado.' });
+        await db.collection('users').updateOne({ _id: new ObjectId(userId) }, { $set: { modulePins: pins } });
         res.status(200).json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Error al actualizar los PINs.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error.' }); }
 });
 
-
-// Client management
 app.post('/api/clients', async (req, res) => {
     const clientData = req.body;
-    if (!clientData || !clientData.userId || !clientData.name) {
-        return res.status(400).json({ error: 'Datos de cliente incompletos.' });
-    }
     try {
-        const clientsCollection = db.collection('clients');
-        const result = await clientsCollection.insertOne(clientData);
-        const newClient = { ...clientData, _id: result.insertedId };
-        res.status(201).json(newClient);
-    } catch (err) {
-        console.error('Error al crear cliente:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    }
+        const result = await db.collection('clients').insertOne(clientData);
+        res.status(201).json({ ...clientData, _id: result.insertedId });
+    } catch (err) { res.status(500).json({ error: 'Error.' }); }
 });
 
-// Stock management with WEIGHTED AVERAGE COST
+// Stock Update with Weighted Cost and Record Price
 app.post('/api/stock/update-batch', async (req, res) => {
     const { updates } = req.body;
-    if (!Array.isArray(updates) || updates.length === 0) {
-        return res.status(400).json({ error: 'Se requiere un array de actualizaciones.' });
-    }
-
+    if (!Array.isArray(updates)) return res.status(400).json({ error: 'Array requerido.' });
     const session = client.startSession();
     try {
         await session.withTransaction(async () => {
-            const stockCollection = db.collection('stock');
-            const movementsCollection = db.collection('stock_movements');
-            const flowersCollection = db.collection('flowers');
-            const fixedItemsCollection = db.collection('fixed_items');
-
             for (const update of updates) {
                 const { itemId, change, userId, movementType, newCost, isPackage } = update;
-                if (!userId) throw new Error(`userId no proporcionado para la actualización del item ${itemId}`);
-                
-                const stockItem = await stockCollection.findOne({ itemId, userId }, { session });
-                if (!stockItem) throw new Error(`Stock item ${itemId} no encontrado para el usuario ${userId}`);
+                const stockItem = await db.collection('stock').findOne({ itemId, userId }, { session });
+                if (!stockItem) continue;
 
-                // Logic for Unit Conversion (Package -> Stems)
+                const flowersCollection = db.collection('flowers');
+                const productsCollection = db.collection('products');
+                const collectionToUpdate = stockItem.type === 'flower' ? flowersCollection : productsCollection;
+
                 let quantityChange = change;
                 if (isPackage && stockItem.type === 'flower') {
-                    // Fetch catalog item to get conversion rate
                     const catalogItem = await flowersCollection.findOne({ id: itemId, userId }, { session });
-                    if (catalogItem && catalogItem.cantidadPorPaquete) {
-                        quantityChange = change * catalogItem.cantidadPorPaquete;
-                    }
+                    if (catalogItem?.cantidadPorPaquete) quantityChange = change * catalogItem.cantidadPorPaquete;
                 }
-
                 const quantityAfter = stockItem.quantity + quantityChange;
 
-                // Logic for Weighted Average Cost (Costo Promedio Ponderado)
+                // Weighted Average Cost Logic
                 if (movementType === 'compra' && newCost && newCost > 0) {
-                    const collectionToUpdate = stockItem.type === 'flower' ? flowersCollection : fixedItemsCollection;
                     const catalogItem = await collectionToUpdate.findOne({ id: itemId, userId }, { session });
-                    
                     if (catalogItem) {
-                        // Calculate new weighted cost
-                        // For flowers, cost is usually per package, but stock is stems. 
-                        // Let's assume newCost coming in is per Package if isPackage is true.
-                        
                         let currentTotalValue = 0;
                         let newTotalValue = 0;
                         let newTotalQty = 0;
+                        let newUnitCost = 0;
+                        let newCostForRecord = 0;
 
                         if (stockItem.type === 'flower') {
-                             // Current value (Stems * Unit Cost)
-                             // Unit Cost = costoPaquete / cantidadPorPaquete (ignoring merma for stock value valuation)
                              const currentUnitCost = (catalogItem.costoPaquete || 0) / (catalogItem.cantidadPorPaquete || 1);
                              currentTotalValue = stockItem.quantity * currentUnitCost;
-                             
-                             // New Value
-                             // If input was packages:
                              if (isPackage) {
-                                 newTotalValue = change * newCost; // change is num packages * cost per package
+                                 newTotalValue = change * newCost;
                                  newTotalQty = stockItem.quantity + (change * (catalogItem.cantidadPorPaquete || 1));
                              } else {
-                                 // If input was units (rare for purchase but possible)
                                  newTotalValue = change * (newCost / (catalogItem.cantidadPorPaquete || 1));
                                  newTotalQty = stockItem.quantity + change;
                              }
-
-                             // New Unit Cost
                              if (newTotalQty > 0) {
-                                 const newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
-                                 // Convert back to Package Cost for the catalog storage
+                                 newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
                                  const newPackageCost = newUnitCost * (catalogItem.cantidadPorPaquete || 1);
-                                 
-                                 await collectionToUpdate.updateOne(
-                                     { _id: catalogItem._id },
-                                     { 
-                                         $set: { costoPaquete: parseFloat(newPackageCost.toFixed(2)) },
-                                         $push: { costHistory: { date: new Date().toISOString(), costoPaquete: parseFloat(newPackageCost.toFixed(2)) } }
-                                     },
-                                     { session }
-                                 );
+                                 await collectionToUpdate.updateOne({ _id: catalogItem._id }, { $set: { costoPaquete: parseFloat(newPackageCost.toFixed(2)) } }, { session });
+                                 newCostForRecord = newPackageCost;
                              }
-
                         } else {
-                            // Fixed Item
                             currentTotalValue = stockItem.quantity * (catalogItem.costo || 0);
                             newTotalValue = change * newCost;
                             newTotalQty = stockItem.quantity + change;
-
                             if (newTotalQty > 0) {
-                                const newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
-                                await collectionToUpdate.updateOne(
-                                     { _id: catalogItem._id },
-                                     { 
-                                         $set: { costo: parseFloat(newUnitCost.toFixed(2)) },
-                                         $push: { costHistory: { date: new Date().toISOString(), costo: parseFloat(newUnitCost.toFixed(2)) } }
-                                     },
-                                     { session }
-                                 );
+                                newUnitCost = (currentTotalValue + newTotalValue) / newTotalQty;
+                                await collectionToUpdate.updateOne({ _id: catalogItem._id }, { $set: { costo: parseFloat(newUnitCost.toFixed(2)) } }, { session });
+                                newCostForRecord = newUnitCost;
                             }
+                        }
+                        
+                        // Record Price History (new collection)
+                        if (newTotalQty > 0) {
+                            await db.collection('record_price').insertOne({
+                                userId,
+                                itemId,
+                                itemName: stockItem.name,
+                                type: stockItem.type,
+                                price: parseFloat(newCostForRecord.toFixed(2)),
+                                date: new Date().toISOString()
+                            }, { session });
                         }
                     }
                 }
 
-                await stockCollection.updateOne(
-                    { _id: stockItem._id },
-                    { $set: { quantity: quantityAfter } },
-                    { session }
-                );
-
-                const movement = {
-                    userId,
-                    itemId,
-                    itemName: stockItem.name,
-                    type: movementType,
-                    quantityChange,
-                    quantityAfter,
-                    createdAt: new Date().toISOString(),
-                    note: isPackage ? `Ingreso de ${change} paquetes` : undefined
-                };
-                await movementsCollection.insertOne(movement, { session });
+                await db.collection('stock').updateOne({ _id: stockItem._id }, { $set: { quantity: quantityAfter } }, { session });
+                await db.collection('stock_movements').insertOne({
+                    userId, itemId, itemName: stockItem.name, type: movementType,
+                    quantityChange, quantityAfter, createdAt: new Date().toISOString()
+                }, { session });
             }
         });
         res.status(200).json({ success: true });
-    } catch (err) {
-        console.error('Error en la actualización de stock por lote:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    } finally {
-        await session.endSession();
-    }
+    } catch (err) { res.status(500).json({ error: 'Error interno.' }); } finally { await session.endSession(); }
 });
 
 app.get('/api/stock/history/:itemId', async (req, res) => {
     const { itemId } = req.params;
-    const { userId, role, selectedUserId } = req.query;
-
+    const { userId } = req.query;
     try {
-        let queryUserId = userId;
-        if (role === 'admin' && selectedUserId && selectedUserId !== 'all') {
-            queryUserId = selectedUserId;
-        }
-
-        const history = await db.collection('stock_movements')
-            .find({ itemId, userId: queryUserId })
-            .sort({ createdAt: -1 })
-            .toArray();
+        const history = await db.collection('stock_movements').find({ itemId, userId }).sort({ createdAt: -1 }).toArray();
         res.json(history);
-    } catch (err) {
-        res.status(500).json({ error: 'Error al obtener historial de stock.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Error.' }); }
 });
 
-
-// Order creation with history
 app.post('/api/orders', async (req, res) => {
     const orderData = req.body;
-    if (!orderData || !orderData.userId) {
-        return res.status(400).json({ error: 'Datos de pedido y userId son requeridos.' });
-    }
     const session = client.startSession();
     try {
         let createdOrder;
         await session.withTransaction(async () => {
-            const ordersCollection = db.collection('orders');
-            const result = await ordersCollection.insertOne({ ...orderData, createdAt: new Date().toISOString() }, { session });
-            const orderId = result.insertedId;
-            createdOrder = { ...orderData, _id: orderId, createdAt: new Date().toISOString() };
-
-            const stockCollection = db.collection('stock');
-            const movementsCollection = db.collection('stock_movements');
+            const result = await db.collection('orders').insertOne({ ...orderData, createdAt: new Date().toISOString() }, { session });
+            createdOrder = { ...orderData, _id: result.insertedId };
 
             for (const item of orderData.items) {
-                if (item.itemId) { // Only for catalog items
-                    const stockItem = await stockCollection.findOne({ itemId: item.itemId, userId: orderData.userId }, { session });
+                if (item.itemId) {
+                    const stockItem = await db.collection('stock').findOne({ itemId: item.itemId, userId: orderData.userId }, { session });
                     if (stockItem) {
                          const quantityAfter = stockItem.quantity - item.quantity;
-                         await stockCollection.updateOne(
-                            { _id: stockItem._id },
-                            { $set: { quantity: quantityAfter } },
-                            { session }
-                        );
-
-                        await movementsCollection.insertOne({
-                            userId: orderData.userId,
-                            itemId: item.itemId,
-                            itemName: stockItem.name,
-                            type: 'venta',
-                            quantityChange: -item.quantity,
-                            quantityAfter,
-                            relatedOrderId: orderId.toString(),
-                            createdAt: new Date().toISOString(),
+                         await db.collection('stock').updateOne({ _id: stockItem._id }, { $set: { quantity: quantityAfter } }, { session });
+                         await db.collection('stock_movements').insertOne({
+                            userId: orderData.userId, itemId: item.itemId, itemName: stockItem.name, type: 'venta',
+                            quantityChange: -item.quantity, quantityAfter, relatedOrderId: result.insertedId.toString(), createdAt: new Date().toISOString(),
                         }, { session });
                     }
                 }
             }
         });
         res.status(201).json(createdOrder);
-    } catch (err) {
-        console.error('Error al crear el pedido:', err);
-        res.status(500).json({ error: 'Error interno del servidor al crear el pedido.' });
-    } finally {
-        await session.endSession();
-    }
+    } catch (err) { res.status(500).json({ error: 'Error al crear pedido.' }); } finally { await session.endSession(); }
 });
 
-// Order Update
 app.put('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
     const orderData = req.body;
     delete orderData._id;
-
-    try {
-        await db.collection('orders').updateOne({ _id: new ObjectId(id) }, { $set: orderData });
-        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(id) });
-        res.json(updatedOrder);
-    } catch (err) {
-        console.error('Error al actualizar el pedido:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    }
+    try { await db.collection('orders').updateOne({ _id: new ObjectId(id) }, { $set: orderData }); res.json({success: true}); } catch (e) { res.status(500).send(e); }
 });
 
-// Order Delete
 app.delete('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
     const session = client.startSession();
     try {
         await session.withTransaction(async () => {
-            const ordersCollection = db.collection('orders');
-            const orderToDelete = await ordersCollection.findOne({ _id: new ObjectId(id) }, { session });
-
-            if (!orderToDelete) {
-                throw new Error('Pedido no encontrado');
-            }
-
-            // Restore stock
-            const stockCollection = db.collection('stock');
-            const movementsCollection = db.collection('stock_movements');
-            for (const item of orderToDelete.items) {
+            const order = await db.collection('orders').findOne({ _id: new ObjectId(id) }, { session });
+            if (!order) throw new Error('Pedido no encontrado');
+            
+            for (const item of order.items) {
                 if (item.itemId) {
-                    const stockItem = await stockCollection.findOne({ itemId: item.itemId, userId: orderToDelete.userId }, { session });
+                    const stockItem = await db.collection('stock').findOne({ itemId: item.itemId, userId: order.userId }, { session });
                     if (stockItem) {
                         const quantityAfter = stockItem.quantity + item.quantity;
-                        await stockCollection.updateOne(
-                            { _id: stockItem._id },
-                            { $set: { quantity: quantityAfter } },
-                            { session }
-                        );
-                        await movementsCollection.insertOne({
-                            userId: orderToDelete.userId,
-                            itemId: item.itemId,
-                            itemName: stockItem.name,
-                            type: 'cancelacion',
-                            quantityChange: item.quantity,
-                            quantityAfter,
-                            relatedOrderId: id,
-                            createdAt: new Date().toISOString(),
+                        await db.collection('stock').updateOne({ _id: stockItem._id }, { $set: { quantity: quantityAfter } }, { session });
+                        await db.collection('stock_movements').insertOne({
+                            userId: order.userId, itemId: item.itemId, itemName: stockItem.name, type: 'cancelacion',
+                            quantityChange: item.quantity, quantityAfter, relatedOrderId: id, createdAt: new Date().toISOString(),
                         }, { session });
                     }
                 }
             }
-            await ordersCollection.deleteOne({ _id: new ObjectId(id) }, { session });
+            await db.collection('orders').deleteOne({ _id: new ObjectId(id) }, { session });
         });
         res.json({ success: true });
-    } catch (err) {
-        console.error('Error al eliminar el pedido:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    } finally {
-        await session.endSession();
-    }
+    } catch (e) { res.status(500).send(e); } finally { await session.endSession(); }
 });
 
-
-// Financial summary with admin view
 app.get('/api/finance/summary', async (req, res) => {
     const { userId, role, selectedUserId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId es requerido.' });
-
     try {
         let matchQuery = { userId };
         let groupKey = "$userId";
+        if (role === 'admin' && (!selectedUserId || selectedUserId === 'all')) { matchQuery = {}; groupKey = "admin_total"; }
+        else if (selectedUserId) matchQuery = { userId: selectedUserId };
 
-        if (role === 'admin') {
-            if (selectedUserId && selectedUserId !== 'all') {
-                matchQuery = { userId: selectedUserId };
-            } else {
-                matchQuery = {}; // Admin seeing all users
-                groupKey = "admin_total";
-            }
-        }
-        
-        const ordersCollection = db.collection('orders');
-        const orderSummary = await ordersCollection.aggregate([
+        const orderSum = await db.collection('orders').aggregate([
             { $match: { ...matchQuery, status: { $ne: 'cancelado' } } },
             { $unwind: "$items" },
-            {
-                $group: {
-                    _id: groupKey,
-                    totalRevenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
-                    totalCostOfGoods: { $sum: { $multiply: ["$items.quantity", "$items.unitCost"] } },
-                }
-            }
+            { $group: { _id: groupKey, totalRevenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } }, totalCost: { $sum: { $multiply: ["$items.quantity", "$items.unitCost"] } } } }
         ]).toArray();
-
-        const expensesCollection = db.collection('fixed_expenses');
-        const expenseSummary = await expensesCollection.aggregate([
-             { $match: matchQuery },
-             {
-                $group: {
-                    _id: groupKey,
-                    totalExpenses: { $sum: "$amount" }
-                }
-             }
-        ]).toArray();
-        const revenue = orderSummary[0]?.totalRevenue || 0;
-        const cogs = orderSummary[0]?.totalCostOfGoods || 0;
-        const fixedExpenses = expenseSummary[0]?.totalExpenses || 0;
-        const netProfit = revenue - cogs - fixedExpenses;
-
-        res.json({
-            totalRevenue: revenue,
-            totalCostOfGoods: cogs,
-            wastedGoodsCost: 0, // Placeholder
-            fixedExpenses: fixedExpenses,
-            netProfit: netProfit,
-        });
-
-    } catch (err) {
-        console.error('Error al calcular el resumen financiero:', err);
-        res.status(500).json({ error: 'Error interno del servidor.' });
-    }
+        
+        const expSum = await db.collection('fixed_expenses').aggregate([{ $match: matchQuery }, { $group: { _id: groupKey, total: { $sum: "$amount" } } }]).toArray();
+        
+        const revenue = orderSum[0]?.totalRevenue || 0;
+        const cogs = orderSum[0]?.totalCost || 0;
+        const expenses = expSum[0]?.total || 0;
+        
+        res.json({ totalRevenue: revenue, totalCostOfGoods: cogs, wastedGoodsCost: 0, fixedExpenses: expenses, netProfit: revenue - cogs - expenses });
+    } catch (e) { res.status(500).send(e); }
 });
 
+// Fixed Expenses, Events CRUD (Simplified)
+const simpleCrud = (col) => {
+    app.post(`/api/${col}`, async (req, res) => { try { const r = await db.collection(col).insertOne(req.body); res.status(201).json({...req.body, _id: r.insertedId}); } catch(e){res.status(500).send(e)} });
+    app.put(`/api/${col}/:id`, async (req, res) => { try { await db.collection(col).updateOne({_id: new ObjectId(req.params.id)}, {$set: req.body}); res.json({success:true}); } catch(e){res.status(500).send(e)} });
+    app.delete(`/api/${col}/:id`, async (req, res) => { try { await db.collection(col).deleteOne({_id: new ObjectId(req.params.id)}); res.json({success:true}); } catch(e){res.status(500).send(e)} });
+};
+simpleCrud('fixed-expenses');
+simpleCrud('events');
 
-// --- Fixed Expenses CRUD ---
-app.post('/api/fixed-expenses', async (req, res) => {
-    const expenseData = req.body;
+// BACKUP ENDPOINT
+app.get('/api/backup/:userId', async (req, res) => {
+    const { userId } = req.params;
     try {
-        const result = await db.collection('fixed_expenses').insertOne(expenseData);
-        res.status(201).json({ ...expenseData, _id: result.insertedId });
-    } catch (err) { res.status(500).json({ error: 'Error al crear gasto fijo' }); }
-});
-app.put('/api/fixed-expenses/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, amount } = req.body;
-    try {
-        await db.collection('fixed_expenses').updateOne({ _id: new ObjectId(id) }, { $set: { name, amount } });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Error al actualizar gasto fijo' }); }
-});
-app.delete('/api/fixed-expenses/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        await db.collection('fixed_expenses').deleteOne({ _id: new ObjectId(id) });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Error al eliminar gasto fijo' }); }
+        const data = {
+            flowers: await db.collection('flowers').find({ userId }).toArray(),
+            products: await db.collection('products').find({ userId }).toArray(),
+            variation_gifts: await db.collection('variation_gifts').find({ userId }).toArray(),
+            stock: await db.collection('stock').find({ userId }).toArray(),
+            orders: await db.collection('orders').find({ userId }).toArray(),
+            clients: await db.collection('clients').find({ userId }).toArray(),
+            events: await db.collection('events').find({ userId }).toArray(),
+            fixed_expenses: await db.collection('fixed_expenses').find({ userId }).toArray(),
+            record_price: await db.collection('record_price').find({ userId }).toArray(),
+            backupDate: new Date().toISOString()
+        };
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: 'Error generando backup' }); }
 });
 
-// --- Events CRUD ---
-app.post('/api/events', async (req, res) => {
-    const eventData = req.body;
-    try {
-        const result = await db.collection('events').insertOne(eventData);
-        res.status(201).json({ ...eventData, _id: result.insertedId });
-    } catch (err) { res.status(500).json({ error: 'Error al crear evento' }); }
-});
-app.put('/api/events/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, date } = req.body;
-    try {
-        await db.collection('events').updateOne({ _id: new ObjectId(id) }, { $set: { name, date } });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Error al actualizar evento' }); }
-});
-app.delete('/api/events/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        await db.collection('events').deleteOne({ _id: new ObjectId(id) });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Error al eliminar evento' }); }
-});
-
-
-// --- Server Start ---
 const PORT = process.env.PORT || 3001;
-
 const startServer = async () => {
   try {
     await client.connect();
-    console.log("Conectado exitosamente a MongoDB.");
-    const dbName = process.env.MONGO_DB_NAME || "Ad_db"; 
-    db = client.db(dbName);
-    console.log(`Usando la base de datos: ${dbName}`);
-    
-    await ensureInitialUsers(); // Cambio aquí: llamamos a la nueva función
-
-    app.listen(PORT, () => {
-      console.log(`Servidor escuchando en el puerto ${PORT}`);
-    });
-  } catch (err) {
-    console.error("No se pudo conectar a MongoDB. Saliendo...", err);
-    process.exit(1);
-  }
+    db = client.db(process.env.MONGO_DB_NAME || "Ad_db");
+    await ensureInitialUsers();
+    app.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
+  } catch (err) { process.exit(1); }
 };
-
 startServer();

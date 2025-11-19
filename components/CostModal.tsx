@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import type { Item, FlowerItem } from '../types.ts';
+import type { Item, FlowerItem, ProductItem } from '../types.ts';
 
 interface CostModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (itemData: Partial<FlowerItem>) => void;
-  item: Item | FlowerItem | null;
+  onSave: (itemData: Partial<FlowerItem> | Partial<ProductItem>) => void;
+  item: Item | FlowerItem | ProductItem | null;
   itemType: 'flower' | 'fixed' | null;
 }
 
@@ -24,7 +24,8 @@ const CostModal: React.FC<CostModalProps> = ({ isOpen, onClose, onSave, item, it
             setCantidadPorPaquete(String(flowerItem.cantidadPorPaquete || '0'));
             setMerma(String(flowerItem.merma || '0'));
         } else if (itemType === 'fixed') {
-            setCosto(String(item.costo || '0'));
+            // Cast to ProductItem (FixedItem) to access 'costo'
+            setCosto(String((item as ProductItem).costo || '0'));
         }
     }
   }, [isOpen, item, itemType]);
@@ -39,12 +40,10 @@ const CostModal: React.FC<CostModalProps> = ({ isOpen, onClose, onSave, item, it
         };
         onSave(updatedFlower);
     } else if (itemType === 'fixed') {
-        const updatedFixed: Partial<Item> = {
+        const updatedFixed: Partial<ProductItem> = {
             costo: parseFloat(costo) || 0
         };
-        // FIX: Cast updatedFixed to Partial<FlowerItem> to satisfy the onSave prop type.
-        // This is safe because the receiving function handles both object shapes based on context.
-        onSave(updatedFixed as Partial<FlowerItem>);
+        onSave(updatedFixed);
     }
   };
   
