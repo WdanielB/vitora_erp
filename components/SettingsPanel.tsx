@@ -86,6 +86,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ flowerItems, productItems
       };
       reader.readAsText(file);
   };
+  
+  const handleResetAccount = async () => {
+      if (window.confirm("PELIGRO: ¿Estás seguro de que quieres ELIMINAR TODOS LOS DATOS de esta cuenta? Esto borrará inventario, pedidos, clientes, todo. No se puede deshacer.")) {
+           try {
+              setSyncStatus('syncing');
+              await api.resetAccount(user._id);
+              alert("Cuenta reseteada correctamente. La página se recargará.");
+              window.location.reload();
+           } catch(e) {
+               alert("Error al resetear cuenta.");
+               setSyncStatus('error');
+           }
+      }
+  };
 
   // --- User CRUD Logic ---
   const handleOpenUserModalNew = () => { setEditingUser(null); setIsUserModalOpen(true); };
@@ -124,6 +138,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ flowerItems, productItems
                  {syncStatus === 'success' && <span className="text-green-500 text-sm">¡Éxito!</span>}
                  {syncStatus === 'error' && <span className="text-red-500 text-sm">Error</span>}
              </div>
+        </div>
+        
+        <div className="pt-6 border-t border-gray-700">
+             <h3 className="text-lg font-bold mb-3 text-red-500">Zona de Peligro</h3>
+             <p className="text-sm text-gray-500 mb-4">Acciones destructivas para la cuenta actual.</p>
+             <button onClick={handleResetAccount} className="flex items-center gap-2 bg-red-900/50 hover:bg-red-800 text-red-200 px-4 py-2 rounded-lg border border-red-800">
+                <TrashIcon className="w-5 h-5"/> Eliminar Todos los Datos (Resetear Cuenta)
+             </button>
         </div>
      </div>
   );

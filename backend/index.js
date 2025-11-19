@@ -161,9 +161,14 @@ const createItemEndpoints = (collectionName, itemType) => {
         if (!userId) return res.status(400).json({ error: 'userId requerido.' });
         try {
             let query = { userId };
-            if (role === 'admin' && selectedUserId && selectedUserId !== 'all') query = { userId: selectedUserId };
-            const items = await db.collection(collectionName).find(query).toArray();
-            res.json(items);
+            if (role === 'admin') {
+                if (selectedUserId && selectedUserId !== 'all') query = { userId: selectedUserId };
+                const items = await db.collection(collectionName).find(query).toArray();
+                res.json(items);
+            } else {
+                 const items = await db.collection(collectionName).find({ userId }).toArray();
+                 res.json(items);
+            }
         } catch (err) { res.status(500).json({ error: 'Error.' }); }
     });
 
@@ -625,13 +630,15 @@ app.post('/api/restore', async (req, res) => {
                      
                      // Insert new data if exists
                      if (data[colName].length > 0) {
+                         // Sanitize _id to avoid conflicts if needed, usually backup _ids are fine if we cleared.
+                         // However, we must ensure they are ObjectIds if they were strings in JSON
                          const itemsToInsert = data[colName].map(item => {
                              const { _id, ...rest } = item;
-                             // We keep _id as ObjectId if possible to maintain history links
+                             // We can keep _id if we want to preserve history links, but need to convert to ObjectId
                              return { 
                                  ...rest, 
                                  _id: new ObjectId(_id), 
-                                 userId 
+                                 userId // Ensure userId matches
                              };
                          });
                          await collection.insertMany(itemsToInsert, { session });
@@ -645,6 +652,32 @@ app.post('/api/restore', async (req, res) => {
         res.status(500).json({ error: 'Error al restaurar copia de seguridad' }); 
     } finally { 
         await session.endSession(); 
+    }
+});
+
+// RESET ENDPOINT
+app.post('/api/reset', async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'UserID requerido' });
+
+    const session = client.startSession();
+    try {
+        await session.withTransaction(async () => {
+            const collections = [
+                'flowers', 'products', 'variation_gifts', 'stock', 
+                'orders', 'clients', 'events', 'fixed_expenses', 'record_price', 'stock_movements'
+            ];
+            
+            for (const colName of collections) {
+                await db.collection(colName).deleteMany({ userId }, { session });
+            }
+        });
+        res.json({ success: true, message: 'Cuenta reseteada exitosamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Error al resetear cuenta' });
+    } finally {
+        await session.endSession();
     }
 });
 

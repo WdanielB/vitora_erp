@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   onSave: (item: Omit<Item, 'id'> & { imageUrl?: string, category?: string, costo?: number, costoPaquete?: number, cantidadPorPaquete?: number, merma?: number }) => void;
   item: Item | FlowerItem | ProductItem | null;
-  itemType: 'flower' | 'fixed' | null; // 'fixed' maps to 'product' logic
+  itemType: 'flower' | 'fixed' | 'product' | null; 
 }
 
 const PRODUCT_CATEGORIES = [
@@ -36,12 +36,14 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
       setName(item?.name || '');
       setPrice(item?.price.toString() || '');
       
-      if (itemType === 'flower' || itemType === 'fixed') {
-        setImageUrl(item?.imageUrl || '');
+      // Handle Image URL
+      if (item && 'imageUrl' in item) {
+          setImageUrl(item.imageUrl || '');
       } else {
-        setImageUrl('');
+          setImageUrl('');
       }
 
+      // Handle Category
       if (item && 'category' in item) {
           setCategory((item as ProductItem).category || 'Adicionales');
       } else {
@@ -54,10 +56,17 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
           setCostoPaquete(f.costoPaquete?.toString() || '0');
           setCantidadPorPaquete(f.cantidadPorPaquete?.toString() || '0');
           setMerma(f.merma?.toString() || '0');
-      } else if (itemType === 'fixed' && item) {
+          // Reset product fields
+          setCosto('0');
+      } else if ((itemType === 'fixed' || itemType === 'product') && item) {
           const p = item as ProductItem;
           setCosto(p.costo?.toString() || '0');
+          // Reset flower fields
+          setCostoPaquete('0');
+          setCantidadPorPaquete('0');
+          setMerma('0');
       } else {
+          // New Item defaults
           setCosto('0');
           setCostoPaquete('0');
           setCantidadPorPaquete('0');
@@ -74,13 +83,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
         name: name.trim(),
         price: priceNumber,
         visible: item?.visible ?? true,
+        imageUrl: imageUrl.trim(),
       };
       
-      if (itemType === 'flower' || itemType === 'fixed') {
-        savedData.imageUrl = imageUrl.trim();
-      }
-      
-      if (itemType === 'fixed') { // Products
+      if (itemType === 'fixed' || itemType === 'product') { // Products
           savedData.category = category;
           savedData.costo = parseFloat(costo) || 0;
       }
@@ -98,6 +104,9 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
 
   if (!isOpen) return null;
 
+  const isProduct = itemType === 'fixed' || itemType === 'product';
+  const isFlower = itemType === 'flower';
+
   return (
     <div 
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4"
@@ -114,7 +123,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
             <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5" required />
           </div>
           
-          {itemType === 'fixed' && (
+          {isProduct && (
              <div className="grid grid-cols-2 gap-4">
                  <div>
                     <label htmlFor="category" className="block mb-1 text-sm font-medium text-gray-400">Categoría</label>
@@ -129,7 +138,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
              </div>
           )}
           
-          {itemType === 'flower' && (
+          {isFlower && (
               <div className="grid grid-cols-3 gap-3 bg-gray-700/30 p-3 rounded-lg border border-gray-600/50">
                   <div>
                     <label htmlFor="costoPaquete" className="block mb-1 text-xs font-medium text-gray-400">Costo Paq.</label>
@@ -151,12 +160,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
             <input type="number" id="price" value={price} onChange={(e) => setPrice(e.target.value)} className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5" required step="0.01" min="0" />
           </div>
           
-          {(itemType === 'flower' || itemType === 'fixed') && (
-            <div>
-              <label htmlFor="imageUrl" className="block mb-1 text-sm font-medium text-gray-400">URL de la Imagen</label>
-              <input type="text" id="imageUrl" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5" placeholder="https://example.com/image.jpg" />
-            </div>
-          )}
+          <div>
+            <label htmlFor="imageUrl" className="block mb-1 text-sm font-medium text-gray-400">URL de la Imagen</label>
+            <input type="text" id="imageUrl" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5" placeholder="https://example.com/image.jpg" />
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="py-2 px-4 text-sm font-medium text-gray-300 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors">Cancelar</button>
             <button type="submit" className="py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors">Guardar</button>

@@ -171,3 +171,13 @@ export const restoreBackup = async (data: any, userId: string) => {
     if (!response.ok) throw new Error("Restore failed");
     return await response.json();
 };
+
+export const resetAccount = async (userId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+    });
+    if (!response.ok) throw new Error("Reset failed");
+    return await response.json();
+};
