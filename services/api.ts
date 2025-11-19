@@ -104,11 +104,28 @@ export const updateUser = (id: string, u: any, adminId: string) => putData(`/api
 export const deleteUser = (id: string, adminId: string) => deleteData(`/api/users/${id}`, adminId);
 export const updateUserPins = (id: string, pins: any, adminId: string) => postData(`/api/users/pins`, { userId: id, pins }, adminId);
 
+// Items (Flowers & Products) - now CRUD
 export const fetchFlowerItems = (user: User, id?: string | null) => fetchData<FlowerItem[]>('/api/flowers', user, id);
-export const updateFlowerItems = (items: FlowerItem[], userId: string) => updateData('/api/flowers', items, userId);
+export const createFlowerItem = (item: any) => postData('/api/flowers', item);
+export const updateFlowerItem = (item: any) => putData(`/api/flowers/${item._id}`, item);
+export const deleteFlowerItem = (id: string) => deleteData(`/api/flowers/${id}`);
+export const updateFlowerItems = async (items: FlowerItem[], userId: string) => {
+    for (const item of items) {
+        if (item._id) await updateFlowerItem(item);
+    }
+    return items;
+};
 
 export const fetchProductItems = (user: User, id?: string | null) => fetchData<ProductItem[]>('/api/products', user, id);
-export const updateProductItems = (items: ProductItem[], userId: string) => updateData('/api/products', items, userId);
+export const createProductItem = (item: any) => postData('/api/products', item);
+export const updateProductItem = (item: any) => putData(`/api/products/${item._id}`, item);
+export const deleteProductItem = (id: string) => deleteData(`/api/products/${id}`);
+export const updateProductItems = async (items: ProductItem[], userId: string) => {
+    for (const item of items) {
+        if (item._id) await updateProductItem(item);
+    }
+    return items;
+};
 
 export const fetchVariationGifts = (user: User, id?: string | null) => fetchData<VariationGift[]>('/api/variation-gifts', user, id);
 export const updateVariationGifts = (items: VariationGift[], userId: string) => updateData('/api/variation-gifts', items, userId);

@@ -153,7 +153,87 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Error interno del servidor.' }); }
 });
 
-// --- Generic Endpoints Creator ---
+// --- Item CRUD with Stock Integration ---
+const createItemEndpoints = (collectionName, itemType) => {
+    // GET
+    app.get(`/api/${collectionName}`, async (req, res) => {
+        const { userId, role, selectedUserId } = req.query;
+        if (!userId) return res.status(400).json({ error: 'userId requerido.' });
+        try {
+            let query = { userId };
+            if (role === 'admin' && selectedUserId && selectedUserId !== 'all') query = { userId: selectedUserId };
+            const items = await db.collection(collectionName).find(query).toArray();
+            res.json(items);
+        } catch (err) { res.status(500).json({ error: 'Error.' }); }
+    });
+
+    // POST (Create new Item + Create Stock Entry)
+    app.post(`/api/${collectionName}`, async (req, res) => {
+        const itemData = req.body;
+        if (!itemData.userId) return res.status(400).json({ error: 'userId requerido.' });
+        
+        // Ensure custom ID if not present
+        if (!itemData.id) itemData.id = `${itemType[0]}_${Date.now()}`;
+
+        const session = client.startSession();
+        try {
+            let createdItem;
+            await session.withTransaction(async () => {
+                const result = await db.collection(collectionName).insertOne(itemData, { session });
+                createdItem = { ...itemData, _id: result.insertedId };
+
+                // Auto-create stock entry
+                await db.collection('stock').insertOne({
+                    itemId: itemData.id,
+                    userId: itemData.userId,
+                    name: itemData.name,
+                    type: itemType,
+                    quantity: 0,
+                    criticalStock: 10
+                }, { session });
+            });
+            res.status(201).json(createdItem);
+        } catch (err) { res.status(500).json({ error: 'Error al crear item.' }); } finally { await session.endSession(); }
+    });
+
+    // PUT (Update Item)
+    app.put(`/api/${collectionName}/:id`, async (req, res) => {
+        const { id } = req.params; // Mongo _id
+        const itemData = req.body;
+        delete itemData._id; // Prevent updating _id
+        try {
+            await db.collection(collectionName).updateOne({ _id: new ObjectId(id) }, { $set: itemData });
+            
+            // Update name in stock if changed
+            if (itemData.name || itemData.id) {
+                await db.collection('stock').updateOne(
+                    { itemId: itemData.id, userId: itemData.userId },
+                    { $set: { name: itemData.name } }
+                );
+            }
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); }
+    });
+
+    // DELETE (Delete Item)
+    app.delete(`/api/${collectionName}/:id`, async (req, res) => {
+        const { id } = req.params;
+        try {
+            const item = await db.collection(collectionName).findOne({ _id: new ObjectId(id) });
+            if (item) {
+                await db.collection(collectionName).deleteOne({ _id: new ObjectId(id) });
+                // Cleanup stock entry
+                await db.collection('stock').deleteOne({ itemId: item.id, userId: item.userId });
+            }
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: 'Error al eliminar.' }); }
+    });
+};
+
+createItemEndpoints('flowers', 'flower');
+createItemEndpoints('products', 'product'); 
+
+// --- Generic Endpoints Creator (Read-Only or Batch specific) ---
 const createDataEndpoints = (endpointName, collectionName) => {
     app.get(`/api/${endpointName}`, async (req, res) => {
         const { userId, role, selectedUserId } = req.query;
@@ -168,36 +248,36 @@ const createDataEndpoints = (endpointName, collectionName) => {
             res.json(items);
         } catch (err) { res.status(500).json({ error: 'Error interno del servidor.' }); }
     });
-
-    app.put(`/api/${endpointName}`, async (req, res) => {
-        const { items, userId } = req.body;
-        if (!Array.isArray(items) || !userId) return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
-        const session = client.startSession();
-        try {
-            await session.withTransaction(async () => {
-                const collection = db.collection(collectionName);
-                await collection.deleteMany({ userId }, { session });
-                if (items.length > 0) {
-                    const itemsToInsert = items.map(({ _id, ...item }) => ({ ...item, userId }));
-                    await collection.insertMany(itemsToInsert, { session });
-                }
-            });
-            const updatedItems = await db.collection(collectionName).find({ userId }).toArray();
-            res.status(200).json(updatedItems);
-        } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); } 
-        finally { await session.endSession(); }
-    });
+    // Generic update logic for simple collections
+    if (collectionName !== 'flowers' && collectionName !== 'products') {
+         app.put(`/api/${endpointName}`, async (req, res) => {
+            const { items, userId } = req.body;
+            if (!Array.isArray(items) || !userId) return res.status(400).json({ error: 'Se esperaba un array de items y un userId.' });
+            const session = client.startSession();
+            try {
+                await session.withTransaction(async () => {
+                    const collection = db.collection(collectionName);
+                    await collection.deleteMany({ userId }, { session });
+                    if (items.length > 0) {
+                        const itemsToInsert = items.map(({ _id, ...item }) => ({ ...item, userId }));
+                        await collection.insertMany(itemsToInsert, { session });
+                    }
+                });
+                const updatedItems = await db.collection(collectionName).find({ userId }).toArray();
+                res.status(200).json(updatedItems);
+            } catch (err) { res.status(500).json({ error: 'Error al actualizar.' }); } 
+            finally { await session.endSession(); }
+        });
+    }
 };
 
-createDataEndpoints('flowers', 'flowers');
-createDataEndpoints('products', 'products'); // Was fixed-items
-createDataEndpoints('variation-gifts', 'variation_gifts'); // New
+createDataEndpoints('variation-gifts', 'variation_gifts');
 createDataEndpoints('stock', 'stock');
 createDataEndpoints('orders', 'orders');
 createDataEndpoints('clients', 'clients');
 createDataEndpoints('events', 'events');
 createDataEndpoints('fixed-expenses', 'fixed_expenses');
-createDataEndpoints('record-prices', 'record_price'); // New
+createDataEndpoints('record-prices', 'record_price');
 
 // --- User CRUD ---
 app.get('/api/users', async (req, res) => {
@@ -314,8 +394,6 @@ app.post('/api/stock/update-batch', async (req, res) => {
                                  newTotalValue = change * newCost;
                                  newTotalQty = stockItem.quantity + (change * (catalogItem.cantidadPorPaquete || 1));
                              } else {
-                                 // User entered cost for stems? Assuming newCost is total cost for the batch of stems or unit cost?
-                                 // Assuming newCost is unit cost if not package
                                  newTotalValue = change * newCost; 
                                  newTotalQty = stockItem.quantity + change;
                              }

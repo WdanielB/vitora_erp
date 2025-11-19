@@ -17,6 +17,7 @@ export interface PriceRecord {
 }
 
 export interface Item {
+  _id?: string; // MongoDB ID
   id: string;
   name: string;
   price: number; // Precio de Venta

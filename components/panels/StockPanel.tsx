@@ -1,13 +1,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { StockItem, User, StockMovement, StockMovementType, FlowerItem, ProductItem, Item } from '../../types.ts';
+import type { StockItem, User, StockMovement, FlowerItem, ProductItem, Item } from '../../types.ts';
 import { PlusIcon } from '../icons/PlusIcon.tsx';
 import StockModal from '../StockModal.tsx';
 import Modal from '../Modal.tsx';
 import * as api from '../../services/api.ts';
 import { ChartLineIcon } from '../icons/ChartLineIcon.tsx';
-import { CheckIcon } from '../icons/CheckIcon.tsx';
-import { XIcon } from '../icons/XIcon.tsx';
 import { TrashIcon } from '../icons/TrashIcon.tsx';
 
 interface StockPanelProps {
@@ -21,29 +19,23 @@ interface StockPanelProps {
     setProductItems: (updater: ProductItem[] | ((prev: ProductItem[]) => ProductItem[])) => Promise<void>;
 }
 
-// New Tab Structure: 'flowers' | 'products'
-// Within each, we show list + optional Kardex details
 type InventoryTab = 'flowers' | 'products';
 
-const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user, selectedUserId, flowerItems, setFlowerItems, productItems, setProductItems }) => {
+const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user, selectedUserId, flowerItems, productItems }) => {
     const [activeTab, setActiveTab] = useState<InventoryTab>('flowers');
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Stock Operations (Buy/Waste/Adjust)
     const [isStockModalOpen, setIsStockModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'add' | 'remove' | 'ajuste'>('add');
     
-    // Selection for Kardex
     const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
     const [history, setHistory] = useState<StockMovement[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     
-    // Product Management
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Item | FlowerItem | null>(null);
     const [productType, setProductType] = useState<'flower' | 'product' | null>(null);
 
-    // Filter items based on tab and search
     const displayedStockItems = useMemo(() => {
         const type = activeTab === 'flowers' ? 'flower' : 'product';
         return stockItems
@@ -51,7 +43,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
             .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [stockItems, activeTab, searchTerm]);
 
-    // Auto-select first item for Kardex if none selected
     useEffect(() => {
         if (!selectedItem && displayedStockItems.length > 0) {
             setSelectedItem(displayedStockItems[0]);
@@ -61,7 +52,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
         }
     }, [displayedStockItems, selectedItem]);
 
-    // Fetch History
     useEffect(() => {
         if (selectedItem) {
             const fetchHistory = async () => {
@@ -86,7 +76,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
         setIsStockModalOpen(false);
     };
 
-    // Catalog Management (Edit/Add/Delete)
     const openProductModalForNew = () => { 
         setProductType(activeTab === 'flowers' ? 'flower' : 'product'); 
         setEditingProduct(null); 
@@ -107,29 +96,48 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
     };
 
     const handleProductSave = async (itemData: any) => {
-        if (productType === 'flower') {
-            await setFlowerItems(prev => {
-                 const newItem: FlowerItem = { ...(editingProduct as FlowerItem), ...itemData, id: editingProduct?.id || `f_${Date.now()}`, userId: user._id };
-                 if (editingProduct) return prev.map(i => i.id === editingProduct.id ? newItem : i);
-                 return [...prev, newItem];
-            });
-        } else {
-            await setProductItems(prev => {
-                const newItem: ProductItem = { ...(editingProduct as ProductItem), ...itemData, id: editingProduct?.id || `p_${Date.now()}`, userId: user._id };
-                if (editingProduct) return prev.map(i => i.id === editingProduct.id ? newItem : i);
-                return [...prev, newItem];
-            });
+        try {
+            if (productType === 'flower') {
+                if (editingProduct && (editingProduct as any)._id) {
+                     await api.updateFlowerItem({ ...editingProduct, ...itemData, userId: user._id });
+                } else {
+                     await api.createFlowerItem({ ...itemData, userId: user._id });
+                }
+            } else {
+                if (editingProduct && (editingProduct as any)._id) {
+                     await api.updateProductItem({ ...editingProduct, ...itemData, userId: user._id });
+                } else {
+                     await api.createProductItem({ ...itemData, userId: user._id });
+                }
+            }
+            onStockUpdate(); // Refresh stock list from server
+            setIsProductModalOpen(false);
+        } catch (error) {
+            console.error("Error saving product/flower:", error);
+            alert("Error al guardar. Revisa los datos.");
         }
-        setIsProductModalOpen(false);
-        onStockUpdate(); // Refresh stock list because names might have changed or new items added
     };
     
     const handleDeleteCatalogItem = async (itemId: string) => {
-        // This is logical delete from frontend state only for now as requested for simplicity, usually would check dependencies
-        if (!window.confirm("¿Eliminar producto del catálogo?")) return;
-        if (activeTab === 'flowers') await setFlowerItems(prev => prev.filter(i => i.id !== itemId));
-        else await setProductItems(prev => prev.filter(i => i.id !== itemId));
-        onStockUpdate();
+        const item = activeTab === 'flowers' 
+            ? flowerItems.find(f => f.id === itemId) 
+            : productItems.find(p => p.id === itemId);
+
+        if (!item || !(item as any)._id) return;
+
+        if (!window.confirm(`¿Eliminar "${item.name}" del catálogo? Esta acción no se puede deshacer.`)) return;
+
+        try {
+            if (activeTab === 'flowers') {
+                await api.deleteFlowerItem((item as any)._id);
+            } else {
+                await api.deleteProductItem((item as any)._id);
+            }
+            onStockUpdate();
+        } catch (error) {
+            console.error("Error deleting:", error);
+            alert("Error al eliminar.");
+        }
     };
 
     const getCatalogDetails = (itemId: string) => {
@@ -139,7 +147,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
 
     return (
         <div className="flex flex-col h-full">
-            {/* Header & Tabs */}
             <div className="flex justify-between items-center mb-2">
                 <h1 className="text-3xl font-bold text-gray-300">Control de Inventario</h1>
                 <div className="flex gap-2">
@@ -156,10 +163,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                 </nav>
             </div>
 
-            {/* Main Content Area */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow overflow-hidden">
-                
-                {/* Left List */}
                 <div className="lg:col-span-7 flex flex-col h-full bg-gray-800/30 rounded-lg border border-gray-700">
                     <div className="p-3 border-b border-gray-700 flex gap-2">
                         <input type="text" placeholder="Buscar item..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow bg-gray-700 border border-gray-600 text-white text-sm rounded-lg p-2"/>
@@ -178,6 +182,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                                         </>
                                     ) : (
                                         <>
+                                             <th className="px-4 py-3">Categoría</th>
                                              <th className="px-4 py-3 text-center">Costo Unit.</th>
                                              <th className="px-4 py-3 text-center">Stock (Uds)</th>
                                         </>
@@ -205,6 +210,7 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                                                 </>
                                             ) : (
                                                 <>
+                                                    <td className="px-4 py-3 text-gray-400">{productDetails?.category || '-'}</td>
                                                     <td className="px-4 py-3 text-center text-gray-300">S/ {productDetails?.costo?.toFixed(2) || '0.00'}</td>
                                                     <td className={`px-4 py-3 text-center font-bold ${item.quantity <= item.criticalStock ? 'text-red-400' : 'text-green-400'}`}>{item.quantity}</td>
                                                 </>
@@ -223,7 +229,6 @@ const StockPanel: React.FC<StockPanelProps> = ({ stockItems, onStockUpdate, user
                     </div>
                 </div>
 
-                {/* Right Kardex */}
                 <div className="lg:col-span-5 bg-gray-800/50 rounded-lg border border-gray-700 flex flex-col h-full overflow-hidden">
                      {selectedItem ? (
                         <div className="flex flex-col h-full">
