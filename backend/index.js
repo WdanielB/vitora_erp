@@ -64,35 +64,36 @@ const ensureInitialUsers = async () => {
     try {
         const usersCollection = db.collection('users');
         
-        // 1. Asegurar ADMIN
-        const adminUser = await usersCollection.findOne({ username: 'ADMIN' });
+        // 1. Asegurar admin (minúsculas)
+        // Usamos regex para verificar si existe 'admin' o 'ADMIN' para no duplicar
+        const adminUser = await usersCollection.findOne({ username: { $regex: /^admin$/i } });
         if (!adminUser) {
-            console.log("Creando Super Usuario ADMIN...");
+            console.log("Creando Super Usuario admin...");
             const hashedPassword = await bcrypt.hash('admin123', saltRounds); // Default pass
             await usersCollection.insertOne({
-                username: 'ADMIN',
+                username: 'admin',
                 password: hashedPassword,
                 role: 'admin',
                 modulePins: { finance: '1234', settings: '1234' },
                 createdAt: new Date()
             });
-             console.log("Usuario ADMIN creado (Pass: admin123).");
+             console.log("Usuario admin creado (Pass: admin123).");
         }
 
-        // 2. Asegurar Usuario Empleado (Floreria1) para que el selector no esté vacío
-        const demoUser = await usersCollection.findOne({ username: 'Floreria1' });
+        // 2. Asegurar Usuario Empleado (floreria1) minúsculas
+        const demoUser = await usersCollection.findOne({ username: { $regex: /^floreria1$/i } });
         if (!demoUser) {
-            console.log("Creando Usuario Empleado de prueba (Floreria1)...");
+            console.log("Creando Usuario Empleado de prueba (floreria1)...");
             const hashedPassword = await bcrypt.hash('user123', saltRounds); // Default pass
             const result = await usersCollection.insertOne({
-                username: 'Floreria1',
+                username: 'floreria1',
                 password: hashedPassword,
                 role: 'user',
                 createdAt: new Date()
             });
             // Sembrar datos para este usuario para que no empiece vacío
             await seedInitialDataForUser(result.insertedId.toString());
-            console.log("Usuario Floreria1 creado (Pass: user123).");
+            console.log("Usuario floreria1 creado (Pass: user123).");
         }
 
     } catch (error) {
@@ -136,7 +137,7 @@ app.post('/api/login', async (req, res) => {
             const userIdString = user._id.toString();
             
             // Seed data for regular users if first time (redundancy check)
-            if (user.username !== 'ADMIN') {
+            if (user.role !== 'admin') {
                  const flowerCount = await db.collection('flowers').countDocuments({ userId: userIdString });
                  if (flowerCount === 0) {
                      await seedInitialDataForUser(userIdString);
@@ -296,9 +297,12 @@ app.put('/api/users/:id', async (req, res) => {
              return res.status(404).json({ error: 'Usuario no encontrado.' });
         }
         
-        // Protección extra para el usuario ADMIN
-        if (userToUpdate.username === 'ADMIN' && username !== 'ADMIN') {
-             return res.status(400).json({ error: 'No se puede cambiar el nombre de usuario del Super Admin.' });
+        // Validación: No permitir quitar rol de admin al último admin
+        if (userToUpdate.role === 'admin' && role !== 'admin') {
+             const adminCount = await db.collection('users').countDocuments({ role: 'admin' });
+             if (adminCount <= 1) {
+                 return res.status(400).json({ error: 'No puedes quitar el rol de administrador al último admin del sistema.' });
+             }
         }
 
         const updateData = { username, role };
@@ -338,16 +342,17 @@ app.delete('/api/users/:id', async (req, res) => {
             return res.status(404).json({ error: 'Usuario no encontrado.' });
         }
 
-        if (userToDelete.username === 'ADMIN') {
-            return res.status(403).json({ error: 'No se puede eliminar al Super Admin del sistema.' });
+        // REGLA MEJORADA: Si se intenta borrar un admin, verificar que no sea el último.
+        // Ya no importa el nombre ("ADMIN"), solo el rol.
+        if (userToDelete.role === 'admin') {
+            const adminCount = await db.collection('users').countDocuments({ role: 'admin' });
+            if (adminCount <= 1) {
+                return res.status(403).json({ error: 'No se puede eliminar al último administrador del sistema.' });
+            }
         }
 
         await db.collection('users').deleteOne({ _id: new ObjectId(id) });
-        // Opcional: Borrar datos relacionados (Cascade delete)
-        // await db.collection('orders').deleteMany({ userId: id });
-        // await db.collection('stock').deleteMany({ userId: id });
-        // ... etc. Por seguridad, mantenemos los datos por ahora.
-
+        
         res.json({ success: true });
     } catch (err) {
         console.error("Error borrando usuario:", err);
