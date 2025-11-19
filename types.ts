@@ -32,6 +32,7 @@ export interface User {
     role: UserRole;
     avatarUrl?: string;
     modulePins?: { [key in View]?: string };
+    createdAt?: string;
 }
 
 export type View = 

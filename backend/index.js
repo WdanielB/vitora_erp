@@ -60,11 +60,12 @@ const seedInitialDataForUser = async (userId) => {
     console.log(`Datos iniciales sembrados para el usuario ${userId}`);
 };
 
-const ensureAdminExists = async () => {
+const ensureInitialUsers = async () => {
     try {
         const usersCollection = db.collection('users');
-        const adminUser = await usersCollection.findOne({ username: 'ADMIN' });
         
+        // 1. Asegurar ADMIN
+        const adminUser = await usersCollection.findOne({ username: 'ADMIN' });
         if (!adminUser) {
             console.log("Creando Super Usuario ADMIN...");
             const hashedPassword = await bcrypt.hash('admin123', saltRounds); // Default pass
@@ -77,8 +78,25 @@ const ensureAdminExists = async () => {
             });
              console.log("Usuario ADMIN creado (Pass: admin123).");
         }
+
+        // 2. Asegurar Usuario Empleado (Floreria1) para que el selector no esté vacío
+        const demoUser = await usersCollection.findOne({ username: 'Floreria1' });
+        if (!demoUser) {
+            console.log("Creando Usuario Empleado de prueba (Floreria1)...");
+            const hashedPassword = await bcrypt.hash('user123', saltRounds); // Default pass
+            const result = await usersCollection.insertOne({
+                username: 'Floreria1',
+                password: hashedPassword,
+                role: 'user',
+                createdAt: new Date()
+            });
+            // Sembrar datos para este usuario para que no empiece vacío
+            await seedInitialDataForUser(result.insertedId.toString());
+            console.log("Usuario Floreria1 creado (Pass: user123).");
+        }
+
     } catch (error) {
-        console.error("Error asegurando usuario ADMIN:", error);
+        console.error("Error asegurando usuarios iniciales:", error);
     }
 };
 
@@ -105,7 +123,7 @@ app.post('/api/login', async (req, res) => {
         if (match) {
             const userIdString = user._id.toString();
             
-            // Seed data for regular users if first time
+            // Seed data for regular users if first time (redundancy check)
             if (user.username !== 'ADMIN') {
                  const flowerCount = await db.collection('flowers').countDocuments({ userId: userIdString });
                  if (flowerCount === 0) {
@@ -637,7 +655,7 @@ const startServer = async () => {
     db = client.db(dbName);
     console.log(`Usando la base de datos: ${dbName}`);
     
-    await ensureAdminExists();
+    await ensureInitialUsers(); // Cambio aquí: llamamos a la nueva función
 
     app.listen(PORT, () => {
       console.log(`Servidor escuchando en el puerto ${PORT}`);

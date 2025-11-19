@@ -10,28 +10,6 @@ const MOCK_DELAY = 400; // Simula latencia de red ligera
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const mockUser: User = {
-    _id: 'mock-admin-id',
-    username: 'admin',
-    role: 'admin',
-    modulePins: {}
-};
-
-// Generador de historial falso para que el Kardex se vea vivo en modo demo
-const generateMockHistory = (itemId: string): StockMovement[] => {
-    const types: ('compra' | 'venta' | 'merma')[] = ['compra', 'venta', 'venta', 'merma', 'venta'];
-    return Array.from({ length: 5 }).map((_, i) => ({
-        _id: `hist_${itemId}_${i}`,
-        userId: 'mock-admin-id',
-        itemId,
-        itemName: 'Item Simulado',
-        type: types[i % types.length],
-        quantityChange: types[i % types.length] === 'compra' ? 50 : -5,
-        quantityAfter: 100 - (i * 5),
-        createdAt: new Date(Date.now() - i * 86400000).toISOString()
-    }));
-};
-
 // --- Authentication ---
 export const login = async (username: string, password: string): Promise<User> => {
     try {
@@ -42,29 +20,68 @@ export const login = async (username: string, password: string): Promise<User> =
         });
 
         if (!response.ok) {
-            // Intentar parsear error, si falla, usar mensaje genérico
+            let errorMessage = 'Contraseña o usuario incorrecto'; // Mensaje por defecto si falla 401/403
             try {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error de autenticación');
+                if (errorData.error) errorMessage = errorData.error;
             } catch (e) {
-                 // Si el backend no devuelve JSON (ej. 404 html o conexión rechazada)
-                 throw new Error('Error de conexión con el servidor.');
+                // Si la respuesta no es JSON, mantenemos el mensaje genérico
             }
+            throw new Error(errorMessage);
         }
-        return response.json();
-    } catch (error) {
-        console.warn("API: Backend no disponible. Activando Modo Demo Offline.", error);
-        await sleep(MOCK_DELAY);
-        // Fallback para Modo Demo (admin/cualquier cosa)
-        return {
-            ...mockUser,
-            username: username || 'admin'
-        };
+        return await response.json();
+    } catch (error: any) {
+        console.warn("Fallo de conexión con el backend:", error.message);
+
+        // --- FALLBACK / MODO OFFLINE ---
+        // Si el servidor está apagado ('Failed to fetch'), permitimos entrar con credenciales locales
+        // para demostración o desarrollo sin backend.
+        if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+            // Simular validación local
+            if (username.toLowerCase() === 'admin' && password === 'admin.1') {
+                 console.log("Activando modo offline para Admin");
+                 return {
+                    _id: 'local-admin',
+                    username: 'ADMIN',
+                    role: 'admin',
+                    modulePins: { finance: '1234', settings: '1234' },
+                    createdAt: new Date().toISOString()
+                };
+            }
+            if (username.toLowerCase() === 'floreria1' && password === 'user.1') {
+                console.log("Activando modo offline para Floreria1");
+                 return {
+                    _id: 'local-user',
+                    username: 'Floreria1',
+                    role: 'user',
+                    createdAt: new Date().toISOString()
+                };
+            }
+            // Si no coincide con las credenciales de respaldo, mostramos error genérico
+             throw new Error('Contraseña o usuario incorrecto (Offline)');
+        }
+        throw error;
     }
 };
 
 // --- Generic Fetch Functions ---
 const fetchData = async <T>(endpoint: string, user: User, selectedUserId: string | null = null): Promise<T> => {
+    // Si estamos en modo offline (id local), no intentamos fetch real
+    const isOfflineUser = user._id.startsWith('local-');
+    
+    if (isOfflineUser) {
+         await sleep(MOCK_DELAY);
+         // Retornar datos mock según el endpoint
+         if (endpoint.includes('/flowers')) return DEFAULT_FLOWER_ITEMS as unknown as T;
+         if (endpoint.includes('/fixed-items')) return DEFAULT_FIXED_ITEMS as unknown as T;
+         if (endpoint.includes('/users')) return [user, { _id: 'local-user', username: 'Floreria1', role: 'user', createdAt: new Date().toISOString() }] as unknown as T;
+         if (endpoint.includes('/finance/summary')) return {
+            totalRevenue: 1500, totalCostOfGoods: 400, wastedGoodsCost: 50, fixedExpenses: 200, netProfit: 850
+        } as unknown as T;
+         // Arrays vacíos por defecto para listas dinámicas en offline
+         return [] as unknown as T;
+    }
+
     try {
         if (!user?._id) throw new Error("Usuario no autenticado.");
         
@@ -78,130 +95,71 @@ const fetchData = async <T>(endpoint: string, user: User, selectedUserId: string
         
         return await response.json();
     } catch (error) {
-        // MOCK DATA FALLBACK - Mantiene la app funcional sin backend
-        await sleep(MOCK_DELAY);
+        // MOCK DATA FALLBACK para usuarios reales si se cae la conexión momentáneamente
+        console.warn(`Fallo al cargar datos de ${endpoint}, usando datos locales de respaldo.`);
         
         if (endpoint.includes('/flowers')) return DEFAULT_FLOWER_ITEMS as unknown as T;
         if (endpoint.includes('/fixed-items')) return DEFAULT_FIXED_ITEMS as unknown as T;
         
-        if (endpoint.includes('/stock/history/')) {
-            const itemId = endpoint.split('/').pop() || 'unknown';
-            return generateMockHistory(itemId) as unknown as T;
+        if (endpoint.includes('/stock') || endpoint.includes('/orders') || endpoint.includes('/events') || endpoint.includes('/users')) {
+            return [] as unknown as T;
         }
-
-        if (endpoint.includes('/stock')) {
-             const allItems = [...DEFAULT_FLOWER_ITEMS, ...DEFAULT_FIXED_ITEMS];
-             return allItems.map(item => ({
-                 _id: `stock_${item.id}`,
-                 itemId: item.id,
-                 userId: user._id,
-                 name: item.name,
-                 type: item.id.startsWith('f') ? 'flower' : 'fixed',
-                 quantity: Math.floor(Math.random() * 50) + 10, 
-                 criticalStock: 10
-             })) as unknown as T;
-        }
-        
-        if (endpoint.includes('/orders')) {
-            // Devolver algunos pedidos de ejemplo
-            return [
-                { _id: 'o1', clientName: 'Juan Pérez', deliveryDate: new Date().toISOString(), status: 'pendiente', total: 150, items: [], address: 'Av. Principal 123', userId: user._id, createdAt: new Date().toISOString() },
-                { _id: 'o2', clientName: 'Maria Lopez', deliveryDate: new Date(Date.now() + 86400000).toISOString(), status: 'entregado', total: 80, items: [], address: 'Calle 2', userId: user._id, createdAt: new Date().toISOString() }
-            ] as unknown as T;
-        }
-        
-        if (endpoint.includes('/clients')) {
-            return [
-                { _id: 'c1', name: 'Cliente Demo 1', phone: '555-0001', address: 'Dirección Demo 1', userId: user._id },
-                { _id: 'c2', name: 'Cliente Demo 2', phone: '555-0002', address: 'Dirección Demo 2', userId: user._id }
-            ] as unknown as T;
-        }
-        
-        if (endpoint.includes('/events')) return [
-            { _id: 'e1', name: 'San Valentín', date: '2025-02-14T00:00:00.000Z', userId: user._id },
-            { _id: 'e2', name: 'Día de la Madre', date: '2025-05-10T00:00:00.000Z', userId: user._id }
-        ] as unknown as T;
-        
-        if (endpoint.includes('/fixed-expenses')) return [
-            { _id: 'ex1', name: 'Alquiler Local', amount: 1200, userId: user._id },
-            { _id: 'ex2', name: 'Luz y Agua', amount: 150, userId: user._id },
-            { _id: 'ex3', name: 'Internet', amount: 80, userId: user._id }
-        ] as unknown as T;
         
         if (endpoint.includes('/finance/summary')) return {
-            totalRevenue: 2500,
-            totalCostOfGoods: 800,
-            wastedGoodsCost: 50,
-            fixedExpenses: 1430,
-            netProfit: 220
+            totalRevenue: 0, totalCostOfGoods: 0, wastedGoodsCost: 0, fixedExpenses: 0, netProfit: 0
         } as unknown as T;
-        
-        if (endpoint.includes('/users')) return [mockUser] as unknown as T;
 
         return [] as unknown as T;
     }
 };
 
 const postData = async <T, R>(endpoint: string, data: T, requesterId?: string): Promise<R> => {
-    try {
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (requesterId) headers['x-user-id'] = requesterId;
+    if (requesterId?.startsWith('local-')) { await sleep(MOCK_DELAY); return {} as R; } // Fake success offline
 
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST', headers, body: JSON.stringify(data) });
-        const text = await response.text(); // Leer como texto primero para evitar error de parseo en vacíos
-        
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
-        return text ? JSON.parse(text) : {} as R;
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (requesterId) headers['x-user-id'] = requesterId;
 
-    } catch (error) {
-        console.warn(`API: Mock POST success for ${endpoint}`);
-        await sleep(MOCK_DELAY);
-        return { ...data, _id: `mock_id_${Date.now()}`, success: true } as unknown as R;
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST', headers, body: JSON.stringify(data) });
+    
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text ? JSON.parse(text).error : `Error ${response.status}`);
     }
+    const text = await response.text();
+    return text ? JSON.parse(text) : {} as R;
 };
 
 const putData = async <T, R>(endpoint: string, data: T, requesterId?: string): Promise<R> => {
-    try {
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (requesterId) headers['x-user-id'] = requesterId;
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(data) });
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-         console.warn(`API: Mock PUT success for ${endpoint}`);
-         await sleep(MOCK_DELAY);
-         return data as unknown as R;
-    }
+    if (requesterId?.startsWith('local-')) { await sleep(MOCK_DELAY); return {} as R; }
+
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (requesterId) headers['x-user-id'] = requesterId;
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(data) });
+    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    return await response.json();
 };
 
 const deleteData = async (endpoint: string, requesterId?: string): Promise<{ success: boolean }> => {
-    try {
-        const headers: HeadersInit = {};
-        if (requesterId) headers['x-user-id'] = requesterId;
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE', headers });
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        console.warn(`API: Mock DELETE success for ${endpoint}`);
-        await sleep(MOCK_DELAY);
-        return { success: true };
-    }
+    if (requesterId?.startsWith('local-')) { await sleep(MOCK_DELAY); return { success: true }; }
+
+    const headers: HeadersInit = {};
+    if (requesterId) headers['x-user-id'] = requesterId;
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE', headers });
+    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    return await response.json();
 };
 
 // Update Batch para arrays
 const updateData = async <T>(endpoint: string, items: T[], userId: string): Promise<T[]> => {
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items, userId }),
-        });
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        await sleep(MOCK_DELAY);
-        return items;
-    }
+    if (userId.startsWith('local-')) { await sleep(MOCK_DELAY); return items; }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, userId }),
+    });
+    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    return await response.json();
 };
 
 // --- EXPORTS ---

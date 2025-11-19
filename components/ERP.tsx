@@ -151,7 +151,7 @@ const ERP: React.FC<ERPProps> = ({ user: initialUser, onLogout }) => {
     }
     
     switch(view) {
-      case 'dashboard': return panelWrapper(<DashboardPanel orders={orders || []} financialSummary={financialSummary} stockItems={stock || []} />);
+      case 'dashboard': return panelWrapper(<DashboardPanel orders={orders || []} financialSummary={financialSummary} stockItems={stock || []} user={user} allUsers={allUsers} onSelectUser={setSelectedUserId} />);
       case 'quotation': return panelWrapper(<MainPanel flowerItems={flowerItems || []} setFlowerItems={handleSetFlowerItems} fixedItems={fixedItems || []} />, true);
       case 'stock': return panelWrapper(<StockPanel stockItems={stock || []} onStockUpdate={() => loadData(selectedUserId)} user={user} selectedUserId={selectedUserId} flowerItems={flowerItems || []} setFlowerItems={handleSetFlowerItems} fixedItems={fixedItems || []} setFixedItems={handleSetFixedItems} />, true);
       case 'orders': return panelWrapper(<OrdersPanel orders={orders || []} allItems={[...(flowerItems || []), ...(fixedItems || [])]} clients={clients || []} onDataNeedsRefresh={() => loadData(selectedUserId)} user={user} />);
