@@ -1,28 +1,46 @@
 
 import React, { useState, useEffect } from 'react';
-import type { Item, FlowerItem } from '../types.ts';
+import type { Item, FlowerItem, ProductItem } from '../types.ts';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (item: Omit<Item, 'id'> & { imageUrl?: string }) => void;
-  item: Item | FlowerItem | null;
+  onSave: (item: Omit<Item, 'id'> & { imageUrl?: string, category?: string }) => void;
+  item: Item | FlowerItem | ProductItem | null;
   itemType: 'flower' | 'fixed' | null;
 }
+
+const PRODUCT_CATEGORIES = [
+    'Ramo',
+    'Box',
+    'Peluche',
+    'Chocolate',
+    'Bebida',
+    'Adicionales'
+];
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }) => {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [category, setCategory] = useState('Adicionales');
 
   useEffect(() => {
     if (isOpen) {
       setName(item?.name || '');
       setPrice(item?.price.toString() || '');
+      
       if (itemType === 'flower' || itemType === 'fixed') {
         setImageUrl(item?.imageUrl || '');
       } else {
         setImageUrl('');
+      }
+
+      // Load category if available, else default
+      if (item && 'category' in item) {
+          setCategory((item as ProductItem).category || 'Adicionales');
+      } else {
+          setCategory('Adicionales');
       }
     }
   }, [isOpen, item, itemType]);
@@ -31,14 +49,20 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
     e.preventDefault();
     const priceNumber = parseFloat(price);
     if (name.trim() && !isNaN(priceNumber) && priceNumber >= 0) {
-      const savedData: Omit<Item, 'id' | 'userId'> & { imageUrl?: string } = {
+      const savedData: any = {
         name: name.trim(),
         price: priceNumber,
         visible: item?.visible ?? true,
       };
+      
       if (itemType === 'flower' || itemType === 'fixed') {
         savedData.imageUrl = imageUrl.trim();
       }
+      
+      if (itemType === 'fixed') { // Fixed items are Products
+          savedData.category = category;
+      }
+      
       // @ts-ignore - userId will be added by the caller
       onSave(savedData);
     }
@@ -68,8 +92,26 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, item, itemType }
               required
             />
           </div>
+          
+          {/* Category Selector only for Products (itemType === 'fixed') */}
+          {itemType === 'fixed' && (
+             <div>
+                <label htmlFor="category" className="block mb-1 text-sm font-medium text-gray-400">Categoría</label>
+                <select
+                    id="category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5"
+                >
+                    {PRODUCT_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                </select>
+             </div>
+          )}
+
           <div>
-            <label htmlFor="price" className="block mb-1 text-sm font-medium text-gray-400">Precio (S/)</label>
+            <label htmlFor="price" className="block mb-1 text-sm font-medium text-gray-400">Precio Venta (S/)</label>
             <input
               type="number"
               id="price"

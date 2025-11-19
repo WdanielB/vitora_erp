@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Order, Item, Client, User, OrderItem, OrderStatus } from '../types.ts';
+import type { Order, Item, Client, User, OrderItem, OrderStatus, ProductItem } from '../types.ts';
 import { PlusIcon } from './icons/PlusIcon.tsx';
 import { TrashIcon } from './icons/TrashIcon.tsx';
 import ClientModal from './ClientModal.tsx';
@@ -23,7 +23,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
     const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().substring(0, 16)); // YYYY-MM-DDTHH:mm
     const [status, setStatus] = useState<OrderStatus>('pendiente');
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-    const [selectedCatalogItem, setSelectedCatalogItem] = useState('');
+    
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     const [dedication, setDedication] = useState('');
 
@@ -31,14 +31,17 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
     const [customItemName, setCustomItemName] = useState('');
     const [customItemPrice, setCustomItemPrice] = useState('');
 
+    // Product Selection States
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todos');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCatalogItem, setSelectedCatalogItem] = useState('');
+
     useEffect(() => {
         if(isOpen) {
             if (existingOrder) {
                 setSelectedClientId(existingOrder.clientId);
                 setAddress(existingOrder.address);
-                // Ensure datetime string is compatible with input type="datetime-local"
                 const d = new Date(existingOrder.deliveryDate);
-                // Manual format to local ISO string-like YYYY-MM-DDTHH:mm
                 const formattedDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
                 setDeliveryDate(formattedDate);
                 
@@ -61,6 +64,8 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
             setCustomItemName('');
             setCustomItemPrice('');
             setSelectedCatalogItem('');
+            setSelectedCategoryFilter('Todos');
+            setSearchTerm('');
         }
     }, [isOpen, existingOrder, clients, prefillItems]);
 
@@ -72,6 +77,25 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
     }, [selectedClientId, clients, existingOrder]);
 
     const total = useMemo(() => orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [orderItems]);
+
+    // Filter items for dropdown
+    const filteredCatalogItems = useMemo(() => {
+        return allItems.filter(item => {
+            const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const itemCategory = (item as ProductItem).category || 'Adicionales';
+            // If item is a flower (usually has no category property in Item interface unless cast), treat as 'Flores' or 'Adicionales'
+            // Assuming allItems mix Flowers and Products.
+            // Logic: If it's a product, check category. If it's a flower, maybe show in 'Flores' or 'Todos'.
+            
+            // Quick fix: Check if it has 'costoPaquete' -> It's a flower.
+            const isFlower = 'costoPaquete' in item;
+            const category = isFlower ? 'Flores' : (itemCategory);
+
+            const matchesCategory = selectedCategoryFilter === 'Todos' || category === selectedCategoryFilter;
+            
+            return matchesSearch && matchesCategory;
+        });
+    }, [allItems, searchTerm, selectedCategoryFilter]);
 
     const handleAddCatalogItem = () => {
         const item = allItems.find(i => i.id === selectedCatalogItem);
@@ -153,11 +177,26 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, allIte
                     <div className="lg:col-span-2 flex flex-col h-full border-l border-gray-700 pl-6">
                          {/* Add Items Section */}
                          <div className="mb-4 space-y-3">
-                             {/* Catalog Add */}
+                             {/* Search & Filter */}
+                             <div className="flex gap-2">
+                                 <select value={selectedCategoryFilter} onChange={e=>setSelectedCategoryFilter(e.target.value)} className="bg-gray-700 text-white text-sm rounded p-2 w-1/3">
+                                     <option value="Todos">Todos</option>
+                                     <option value="Flores">Flores</option>
+                                     <option value="Ramo">Ramo</option>
+                                     <option value="Box">Box</option>
+                                     <option value="Peluche">Peluche</option>
+                                     <option value="Chocolate">Chocolate</option>
+                                     <option value="Bebida">Bebida</option>
+                                     <option value="Adicionales">Adicionales</option>
+                                 </select>
+                                 <input type="text" placeholder="Buscar producto..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="bg-gray-700 text-white text-sm rounded p-2 flex-grow" />
+                             </div>
+
+                             {/* Product Select */}
                              <div className="flex gap-2">
                                  <select value={selectedCatalogItem} onChange={e=>setSelectedCatalogItem(e.target.value)} className="bg-gray-700 text-white flex-grow rounded p-2 text-sm">
                                      <option value="">-- Seleccionar del Catálogo --</option>
-                                     {allItems.map(i=><option key={i.id} value={i.id}>{i.name} - S/ {i.price}</option>)}
+                                     {filteredCatalogItems.map(i=><option key={i.id} value={i.id}>{i.name} - S/ {i.price}</option>)}
                                  </select>
                                  <button onClick={handleAddCatalogItem} disabled={!selectedCatalogItem} className="bg-purple-600 disabled:opacity-50 text-white px-3 rounded text-sm font-bold">Añadir</button>
                              </div>

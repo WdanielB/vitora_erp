@@ -38,7 +38,16 @@ const OrdersPanel: React.FC<OrdersPanelProps> = ({ orders, allItems, clients, on
         } catch(error) { console.error(error); }
         setIsModalOpen(false); setEditingOrder(null);
     };
-    const handleDeleteOrder = async (id: string) => { if(window.confirm("Confirmar eliminación?")) { await api.deleteOrder(id, user._id); onDataNeedsRefresh(); } };
+    const handleDeleteOrder = async (id: string) => { 
+        if(window.confirm("Confirmar eliminación? Esto intentará restaurar el stock de los productos.")) { 
+            try {
+                await api.deleteOrder(id, user._id); 
+                onDataNeedsRefresh(); 
+            } catch (error: any) {
+                alert(`Error al eliminar: ${error.message || 'Intente nuevamente'}`);
+            }
+        } 
+    };
 
     return (
         <div>

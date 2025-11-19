@@ -39,6 +39,7 @@ export interface FlowerItem extends Item {
 export interface ProductItem extends Item {
     costo: number;
     stock: number; // Inventario directo
+    category?: string; // New field for product type
 }
 
 // Variation Gift (Tipos de Ramos, Cajas): Solo para configuración de cotización

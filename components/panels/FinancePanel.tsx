@@ -71,10 +71,24 @@ const FinancePanel: React.FC<FinancePanelProps> = ({ summary, fixedExpenses, ord
     };
 
     const handleCostSave = async (itemData: any) => {
-        if (costItemType === 'flower') {
-            await setFlowerItems(prev => prev.map(i => i.id === editingCostItem?.id ? { ...i, ...itemData } : i));
-        } else {
-            await setProductItems(prev => prev.map(i => i.id === editingCostItem?.id ? { ...i, ...itemData } : i));
+        try {
+            if (costItemType === 'flower') {
+                // Update local state Optimistically
+                const updatedItem = { ...editingCostItem, ...itemData } as FlowerItem;
+                await setFlowerItems(prev => prev.map(i => i.id === editingCostItem?.id ? updatedItem : i));
+                // Persist to API
+                await api.updateFlowerItems([updatedItem], user._id);
+            } else {
+                // Update local state Optimistically
+                const updatedItem = { ...editingCostItem, ...itemData } as ProductItem;
+                await setProductItems(prev => prev.map(i => i.id === editingCostItem?.id ? updatedItem : i));
+                // Persist to API
+                await api.updateProductItems([updatedItem], user._id);
+            }
+            onDataNeedsRefresh(); // Refresh other components that might need this data
+        } catch (error) {
+            console.error("Error saving costs:", error);
+            alert("Error al guardar los costos.");
         }
         setIsCostModalOpen(false);
     };

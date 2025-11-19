@@ -90,16 +90,19 @@ const DEFAULT_PRODUCTS = [
     {
       "id": "p1", "name": "Ferrero Rocher x8", "price": 25, "visible": true,
       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQJ8Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q&s",
-      "costo": 15, "stock": 20
+      "costo": 15, "stock": 20,
+      "category": "Chocolate"
     },
     {
       "id": "p2", "name": "Peluche Oso Pequeño", "price": 35, "visible": true,
       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQJ8Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q9Q&s",
-      "costo": 18, "stock": 10
+      "costo": 18, "stock": 10,
+      "category": "Peluche"
     },
     {
        "id": "p3", "name": "Globo Metálico 18\"", "price": 10, "visible": true,
-       "imageUrl": "", "costo": 3, "stock": 50
+       "imageUrl": "", "costo": 3, "stock": 50,
+       "category": "Adicionales"
     }
 ];
 
