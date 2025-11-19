@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { User } from '../types.ts';
 import * as api from '../services/api.ts';
 import { EyeIcon } from './icons/EyeIcon.tsx';
@@ -16,6 +16,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    
+    // Connection Check State
+    const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+    useEffect(() => {
+        checkConnection();
+    }, []);
+
+    const checkConnection = async () => {
+        setDbStatus('checking');
+        const isConnected = await api.checkBackendHealth();
+        setDbStatus(isConnected ? 'connected' : 'disconnected');
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,7 +45,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     };
 
     return (
-        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 font-sans">
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 font-sans relative">
             <div className="w-full max-w-[400px] text-center">
                  {/* Brand Header */}
                  <div className="mb-12">
@@ -120,6 +133,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                         </a>
                     </div>
                 </form>
+            </div>
+            
+            {/* DB Status Indicator */}
+            <div className="absolute bottom-4 flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity" onClick={checkConnection} title="Click para re-conectar">
+                <div className={`w-2.5 h-2.5 rounded-full ${
+                    dbStatus === 'checking' ? 'bg-yellow-400 animate-pulse' :
+                    dbStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <span className="text-xs text-gray-400 font-medium">
+                    {dbStatus === 'checking' ? 'Verificando servidor...' :
+                     dbStatus === 'connected' ? 'Servidor & DB Conectados' : 'Sin conexión al servidor'}
+                </span>
             </div>
         </div>
     );

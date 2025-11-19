@@ -106,6 +106,18 @@ app.get('/', (req, res) => {
   res.send('AD ERP ESTA ON LAI (stá funcionando con MongoDB y autenticación!)');
 });
 
+// --- HEALTH CHECK ENDPOINT ---
+app.get('/api/health', async (req, res) => {
+    try {
+        // Ejecuta un comando ping simple a la base de datos
+        await db.command({ ping: 1 });
+        res.json({ status: 'ok', message: 'Conexión exitosa a MongoDB' });
+    } catch (error) {
+        console.error("Health check failed:", error);
+        res.status(500).json({ status: 'error', message: 'No se pudo conectar a la base de datos', error: error.message });
+    }
+});
+
 // --- Auth Endpoint ---
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;

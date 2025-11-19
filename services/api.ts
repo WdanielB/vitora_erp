@@ -10,6 +10,16 @@ const MOCK_DELAY = 400; // Simula latencia de red ligera
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- Health Check ---
+export const checkBackendHealth = async (): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/health`);
+        return response.ok;
+    } catch (error) {
+        return false;
+    }
+};
+
 // --- Authentication ---
 export const login = async (username: string, password: string): Promise<User> => {
     try {
